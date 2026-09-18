@@ -247,6 +247,8 @@ class GeminiVideoService {
         lighting: String
     ): String {
         val styleModifier = when (style) {
+            "3D Anime Studio" -> "cel-shaded 3D anime cinematic render, sharp contour outlines, dramatic high-key rim lighting, dynamic anime keyframing, stylized particle effects"
+            "Indian Cartoon 3D Style" -> "vibrant Indian 3D animation style with expressive stylized proportions, colorful festival palettes, animated town street atmosphere, playful energetic dynamics"
             "Cyberpunk" -> "hyper-detailed futuristic cityscape drenched in rain, neon holographic signs, chromatic aberration, reflections on wet asphalt"
             "Anime" -> "vibrant Makoto Shinkai style, hand-drawn aesthetic, dramatic sky gradients, floating dust motes, emotive character framing"
             "Studio Ghibli" -> "whimsical storybook watercolor art, lush rolling green meadows, fluffy billowing clouds, gentle nostalgic warmth"

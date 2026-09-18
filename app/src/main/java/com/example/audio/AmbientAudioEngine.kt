@@ -3,16 +3,20 @@ package com.example.audio
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
+import com.example.data.model.EqualizerPreset
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlin.math.pow
 import kotlin.math.sin
+import kotlin.math.tanh
 
 /**
  * Real-time synthesis of cinematic ambient soundscapes using AudioTrack.
- * Generates harmonic chords, sub-bass drones, and atmospheric textures.
+ * Features pitch shifting (-12 to +12 semitones), equalizer presets,
+ * volume automation, and noise suppression.
  */
 class AmbientAudioEngine {
     private var audioTrack: AudioTrack? = null
@@ -24,6 +28,18 @@ class AmbientAudioEngine {
 
     @Volatile
     var isMuted = false
+
+    @Volatile
+    var volume = 1.0f
+
+    @Volatile
+    var pitchSemitones = 0
+
+    @Volatile
+    var equalizerPreset: EqualizerPreset = EqualizerPreset.STUDIO_WARMTH
+
+    @Volatile
+    var noiseSuppression = true
 
     private val sampleRate = 44100
     private val bufferSize = AudioTrack.getMinBufferSize(
@@ -66,7 +82,7 @@ class AmbientAudioEngine {
                 var lfoPhase = 0.0
 
                 // Base frequencies based on mood
-                val (baseFreq1, baseFreq2, baseFreq3) = when (mood) {
+                val (rawFreq1, rawFreq2, rawFreq3) = when (mood) {
                     "cyber_pulse" -> Triple(110.0, 164.8, 220.0) // A2, E3, A3
                     "cinematic_drone" -> Triple(55.0, 82.4, 110.0) // A1, E2, A2 (sub-bass)
                     "nature_wind" -> Triple(146.83, 220.0, 293.66) // D3, A3, D4
@@ -74,9 +90,23 @@ class AmbientAudioEngine {
                 }
 
                 while (isActive && isPlaying) {
-                    if (isMuted) {
+                    if (isMuted || volume <= 0.01f) {
                         shortBuffer.fill(0)
                     } else {
+                        // Compute pitch multiplier from semitones: 2^(semitones / 12)
+                        val pitchMultiplier = 2.0.pow(pitchSemitones.toDouble() / 12.0)
+                        val baseFreq1 = rawFreq1 * pitchMultiplier
+                        val baseFreq2 = rawFreq2 * pitchMultiplier
+                        val baseFreq3 = rawFreq3 * pitchMultiplier
+
+                        // EQ weight adjustments
+                        val (w1, w2, w3) = when (equalizerPreset) {
+                            EqualizerPreset.BASS_BOOST -> Triple(0.75, 0.25, 0.15)
+                            EqualizerPreset.VOCAL_CLARITY -> Triple(0.25, 0.45, 0.50)
+                            EqualizerPreset.STUDIO_WARMTH -> Triple(0.55, 0.35, 0.30)
+                            EqualizerPreset.FLAT -> Triple(0.40, 0.35, 0.30)
+                        }
+
                         for (i in shortBuffer.indices) {
                             lfoPhase += 2.0 * Math.PI * 0.2 / sampleRate // 0.2 Hz slow breath
                             val lfo = 0.7 + 0.3 * sin(lfoPhase)
@@ -89,12 +119,23 @@ class AmbientAudioEngine {
                             phase2 = (phase2 + step2) % (2.0 * Math.PI)
                             phase3 = (phase3 + step3) % (2.0 * Math.PI)
 
-                            val sample1 = sin(phase1) * 0.5
-                            val sample2 = sin(phase2) * 0.3
-                            val sample3 = sin(phase3) * 0.2
+                            val sample1 = sin(phase1) * w1
+                            val sample2 = sin(phase2) * w2
+                            val sample3 = sin(phase3) * w3
 
-                            val mixed = (sample1 + sample2 + sample3) * lfo * 0.4
-                            shortBuffer[i] = (mixed * Short.MAX_VALUE).toInt().coerceIn(
+                            var mixed = (sample1 + sample2 + sample3) * lfo * volume
+
+                            // Studio warmth tube saturation simulation
+                            if (equalizerPreset == EqualizerPreset.STUDIO_WARMTH) {
+                                mixed = tanh(mixed * 1.25)
+                            }
+
+                            // Noise suppression threshold gate
+                            if (noiseSuppression && kotlin.math.abs(mixed) < 0.02) {
+                                mixed = 0.0
+                            }
+
+                            shortBuffer[i] = (mixed * 0.4 * Short.MAX_VALUE).toInt().coerceIn(
                                 Short.MIN_VALUE.toInt(),
                                 Short.MAX_VALUE.toInt()
                             ).toShort()

@@ -20,15 +20,20 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeMute
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
+import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Repeat
@@ -57,11 +62,19 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.model.BeatTransient
+import com.example.data.model.CaptionSegment
 import com.example.data.model.SceneShot
 import com.example.data.model.VideoProject
 import com.example.ui.theme.CinemaAmber
@@ -73,6 +86,7 @@ import com.example.ui.theme.CinemaSurface
 import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
+import com.example.ui.theme.ThemeManager
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -83,16 +97,20 @@ fun CinematicVideoPlayer(
     isFullscreen: Boolean = false,
     onToggleFullscreen: () -> Unit = {},
     isMuted: Boolean = false,
-    onToggleMute: () -> Unit = {}
+    onToggleMute: () -> Unit = {},
+    enableTransformGestures: Boolean = false,
+    onTransformChange: ((scale: Float, panX: Float, panY: Float, rotation: Float) -> Unit)? = null,
+    beatTransients: List<BeatTransient> = emptyList()
 ) {
     val durationSeconds = project.durationSeconds.toFloat().coerceAtLeast(3f)
     var currentTimeSec by remember(project.id) { mutableFloatStateOf(0f) }
     var isPlaying by remember { mutableStateOf(true) }
     var isLooping by remember { mutableStateOf(true) }
-    var playbackSpeed by remember { mutableFloatStateOf(1.0f) }
+    var playbackSpeed by remember(project.playbackSpeed) { mutableFloatStateOf(project.playbackSpeed) }
     var showControls by remember { mutableStateOf(true) }
 
     val scenes = remember(project.scenesJson) { project.getScenes() }
+    val captions = remember(project.captionsJson) { project.getCaptions() }
 
     // Real-time animation loop
     LaunchedEffect(isPlaying, durationSeconds, playbackSpeed, isLooping) {
@@ -124,8 +142,16 @@ fun CinematicVideoPlayer(
     val aspectMultiplier = when (project.aspectRatio) {
         "9:16" -> 9f / 16f
         "1:1" -> 1f
+        "4:5" -> 4f / 5f
+        "21:9" -> 21f / 9f
         "4:3" -> 4f / 3f
         else -> 16f / 9f
+    }
+
+    // Check if close to a beat transient (within 120ms) for beat flash
+    val isNearTransient = remember(currentTimeSec, beatTransients) {
+        val currentMs = (currentTimeSec * 1000L).toLong()
+        beatTransients.any { kotlin.math.abs(it.timestampMs - currentMs) < 120L }
     }
 
     Box(
@@ -155,6 +181,19 @@ fun CinematicVideoPlayer(
                 modifier = Modifier
                     .fillMaxSize()
                     .testTag("video_canvas")
+                    .then(
+                        if (enableTransformGestures) {
+                            Modifier.pointerInput(project.id) {
+                                detectTransformGestures { _, pan, zoom, rotation ->
+                                    val newScale = (project.canvasScale * zoom).coerceIn(0.5f, 3.5f)
+                                    val newPanX = (project.canvasPanX + pan.x).coerceIn(-600f, 600f)
+                                    val newPanY = (project.canvasPanY + pan.y).coerceIn(-600f, 600f)
+                                    val newRot = (project.canvasRotation + rotation).coerceIn(-180f, 180f)
+                                    onTransformChange?.invoke(newScale, newPanX, newPanY, newRot)
+                                }
+                            }
+                        } else Modifier
+                    )
             ) {
                 drawCinematicScene(
                     project = project,
@@ -162,8 +201,75 @@ fun CinematicVideoPlayer(
                     timeSec = currentTimeSec,
                     durationSec = durationSeconds,
                     activeSceneIndex = activeSceneIndex,
-                    totalScenes = scenes.size.coerceAtLeast(1)
+                    totalScenes = scenes.size.coerceAtLeast(1),
+                    isNearBeatTransient = isNearTransient && project.snapToTransients
                 )
+            }
+
+            // Dual-Track Overlay (Track 2: PIP Layer)
+            if (project.overlayMediaUri != null || project.overlayMediaName != null) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(14.dp),
+                    contentAlignment = Alignment.TopEnd
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size((110 * project.overlayScale).dp, (70 * project.overlayScale).dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF0F172A).copy(alpha = project.overlayOpacity))
+                            .testTag("overlay_track_pip")
+                            .padding(6.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxSize(),
+                            verticalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .background(CinemaPink, CircleShape)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "TRACK 2 OVERLAY",
+                                    color = CinemaPink,
+                                    fontSize = 8.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 0.5.sp
+                                )
+                            }
+                            Text(
+                                text = project.overlayMediaName ?: "Media Track",
+                                color = Color.White,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Auto-Captions Dynamic Subtitles Overlay
+            if (project.hasCaptions && captions.isNotEmpty()) {
+                val currentMs = (currentTimeSec * 1000L).toLong()
+                val activeCaption = captions.firstOrNull { currentMs in it.startMs..it.endMs }
+                    ?: captions.firstOrNull { currentMs < it.endMs }
+
+                if (activeCaption != null) {
+                    AutoCaptionsOverlayView(
+                        caption = activeCaption,
+                        style = project.captionStyle,
+                        currentMs = currentMs,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = if (showControls) 64.dp else 24.dp)
+                            .padding(horizontal = 20.dp)
+                    )
+                }
             }
 
             // Anamorphic Letterbox Cinema Bars if enabled in 16:9/landscape
@@ -230,7 +336,7 @@ fun CinematicVideoPlayer(
                 shape = RoundedCornerShape(8.dp)
             ) {
                 Text(
-                    text = "${project.aspectRatio} | 4K AI",
+                    text = "${project.aspectRatio} | ${project.bpm}BPM",
                     color = TextSecondary,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
@@ -456,14 +562,20 @@ private fun DrawScope.drawCinematicScene(
     timeSec: Float,
     durationSec: Float,
     activeSceneIndex: Int,
-    totalScenes: Int
+    totalScenes: Int,
+    isNearBeatTransient: Boolean = false
 ) {
     val width = size.width
     val height = size.height
     if (width <= 0 || height <= 0) return
 
-    val progress = (timeSec / durationSec).coerceIn(0f, 1f)
-    val sceneProgress = ((timeSec % (durationSec / totalScenes.toFloat())) / (durationSec / totalScenes.toFloat())).coerceIn(0f, 1f)
+    val sceneDuration = (durationSec / totalScenes.toFloat()).coerceAtLeast(1f)
+    val sceneTime = (timeSec % sceneDuration)
+    val sceneProgress = (sceneTime / sceneDuration).coerceIn(0f, 1f)
+
+    // Check transition window (first 0.35s of each scene after the first)
+    val inTransition = sceneTime < 0.35f && activeSceneIndex > 0
+    val transitionRatio = if (inTransition) (sceneTime / 0.35f).coerceIn(0f, 1f) else 1f
 
     // Palette parsing
     val primaryColor = try {
@@ -484,7 +596,7 @@ private fun DrawScope.drawCinematicScene(
         CinemaBackground
     }
 
-    // Camera Motion Transform Calculations:
+    // Camera Motion Calculations
     val motionIntensity = project.motionIntensity
     val cameraType = activeScene?.cameraMovement ?: project.cameraMotion
 
@@ -512,138 +624,249 @@ private fun DrawScope.drawCinematicScene(
             zoomScale = 1.0f + 0.25f * motionIntensity * sceneProgress
             panX = sin(sceneProgress * 4.0).toFloat() * 20f
         }
-        else -> { // Dolly / Dynamic
+        else -> {
             zoomScale = 1.0f + 0.2f * motionIntensity * sceneProgress
             panX = (sceneProgress - 0.5f) * 20f
         }
     }
 
-    // 1. Dynamic Atmosphere & Sky Gradient
-    val skyGradient = Brush.verticalGradient(
-        colors = listOf(
-            darkBaseColor,
-            secondaryColor.copy(alpha = 0.7f),
-            primaryColor.copy(alpha = 0.45f)
-        ),
-        startY = panY,
-        endY = height * 0.85f + panY
-    )
-    drawRect(brush = skyGradient, size = size)
-
-    // 2. Horizon / Celestial Body (Sun/Moon/Core)
-    val sunRadius = (width * 0.14f) * zoomScale
-    val sunCenterX = width * 0.5f + panX
-    val sunCenterY = height * 0.42f + panY
-
-    drawCircle(
-        brush = Brush.radialGradient(
-            colors = listOf(
-                primaryColor,
-                secondaryColor.copy(alpha = 0.6f),
-                Color.Transparent
-            ),
-            center = Offset(sunCenterX, sunCenterY),
-            radius = sunRadius * 2.2f
-        ),
-        radius = sunRadius * 2.2f,
-        center = Offset(sunCenterX, sunCenterY)
-    )
-
-    drawCircle(
-        color = Color.White.copy(alpha = 0.9f),
-        radius = sunRadius * 0.6f,
-        center = Offset(sunCenterX, sunCenterY)
-    )
-
-    // 3. Volumetric Light Beams (Anamorphic sweep)
-    val beamOffset = (sin((timeSec * 0.8).toDouble()) * width * 0.3).toFloat()
-    val beamPath = Path().apply {
-        moveTo(sunCenterX + beamOffset - 80f, 0f)
-        lineTo(sunCenterX + beamOffset + 80f, 0f)
-        lineTo(width * 0.9f + panX, height)
-        lineTo(width * 0.1f + panX, height)
-        close()
-    }
-    drawPath(
-        path = beamPath,
-        brush = Brush.verticalGradient(
-            colors = listOf(
-                primaryColor.copy(alpha = 0.25f),
-                secondaryColor.copy(alpha = 0.08f),
-                Color.Transparent
-            )
-        )
-    )
-
-    // 4. Stylized Midground Silhouettes (Mountains or Futuristic Skyline depending on style)
-    val isCyberpunkOrSciFi = project.style.contains("Cyberpunk", ignoreCase = true) ||
-            project.style.contains("Sci-Fi", ignoreCase = true)
-
-    if (isCyberpunkOrSciFi) {
-        // Draw futuristic city silhouettes
-        drawCyberpunkSkyline(width, height, panX, panY, zoomScale, primaryColor, secondaryColor)
-    } else {
-        // Draw cinematic organic terrain / mountain layers
-        drawCinematicMountains(width, height, panX, panY, zoomScale, primaryColor, secondaryColor, darkBaseColor)
+    // Transition animations:
+    var transitionAlpha = 1.0f
+    if (inTransition) {
+        when (project.transitionEffect) {
+            "Fade" -> {
+                transitionAlpha = transitionRatio
+            }
+            "Whip Pan" -> {
+                panX += (1f - transitionRatio) * width * 0.7f
+            }
+            "Zoom Punch" -> {
+                zoomScale *= 1.0f + (1f - transitionRatio) * 0.5f
+            }
+            "Glitch Warp", "RGB Split" -> {
+                panX += sin(sceneTime * 80f) * 18f * (1f - transitionRatio)
+            }
+        }
     }
 
-    // 5. Floating Particles / Bokeh / Dust Motes
-    val particleCount = 28
-    for (i in 0 until particleCount) {
-        val speedFactor = 0.3f + (i % 5) * 0.15f
-        val particleX = ((i * 73f + timeSec * 45f * speedFactor + panX) % width + width) % width
-        val particleY = ((i * 127f - timeSec * 25f * speedFactor + panY) % height + height) % height
-        val particleRadius = (2f + (i % 4) * 2f) * zoomScale
-        val particleAlpha = 0.3f + 0.4f * sin((timeSec + i).toDouble()).toFloat().coerceIn(0f, 1f)
+    // Wrap drawing inside user canvas transforms: Pan, Scale, Rotation
+    translate(left = project.canvasPanX, top = project.canvasPanY) {
+        scale(scale = project.canvasScale, pivot = Offset(width / 2f, height / 2f)) {
+            rotate(degrees = project.canvasRotation, pivot = Offset(width / 2f, height / 2f)) {
 
+                // 1. Dynamic Atmosphere & Sky Gradient
+                val skyGradient = Brush.verticalGradient(
+                    colors = listOf(
+                        darkBaseColor.copy(alpha = transitionAlpha),
+                        secondaryColor.copy(alpha = 0.7f * transitionAlpha),
+                        primaryColor.copy(alpha = 0.45f * transitionAlpha)
+                    ),
+                    startY = panY,
+                    endY = height * 0.85f + panY
+                )
+                drawRect(brush = skyGradient, size = size)
+
+                // 2. Horizon / Celestial Body
+                val sunRadius = (width * 0.14f) * zoomScale
+                val sunCenterX = width * 0.5f + panX
+                val sunCenterY = height * 0.42f + panY
+
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            primaryColor.copy(alpha = transitionAlpha),
+                            secondaryColor.copy(alpha = 0.6f * transitionAlpha),
+                            Color.Transparent
+                        ),
+                        center = Offset(sunCenterX, sunCenterY),
+                        radius = sunRadius * 2.2f
+                    ),
+                    radius = sunRadius * 2.2f,
+                    center = Offset(sunCenterX, sunCenterY)
+                )
+
+                drawCircle(
+                    color = Color.White.copy(alpha = 0.9f * transitionAlpha),
+                    radius = sunRadius * 0.6f,
+                    center = Offset(sunCenterX, sunCenterY)
+                )
+
+                // 3. Volumetric Light Beams
+                val beamOffset = (sin((timeSec * 0.8).toDouble()) * width * 0.3).toFloat()
+                val beamPath = Path().apply {
+                    moveTo(sunCenterX + beamOffset - 80f, 0f)
+                    lineTo(sunCenterX + beamOffset + 80f, 0f)
+                    lineTo(width * 0.9f + panX, height)
+                    lineTo(width * 0.1f + panX, height)
+                    close()
+                }
+                drawPath(
+                    path = beamPath,
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            primaryColor.copy(alpha = 0.25f * transitionAlpha),
+                            secondaryColor.copy(alpha = 0.08f * transitionAlpha),
+                            Color.Transparent
+                        )
+                    )
+                )
+
+                // 4. Stylized Midground Silhouettes
+                val isCyberpunkOrSciFi = project.style.contains("Cyberpunk", ignoreCase = true) ||
+                        project.style.contains("Sci-Fi", ignoreCase = true)
+
+                if (isCyberpunkOrSciFi) {
+                    drawCyberpunkSkyline(width, height, panX, panY, zoomScale, primaryColor, secondaryColor)
+                } else {
+                    drawCinematicMountains(width, height, panX, panY, zoomScale, primaryColor, secondaryColor, darkBaseColor)
+                }
+
+                // 5. Floating Bokeh Particles
+                val particleCount = 28
+                for (i in 0 until particleCount) {
+                    val speedFactor = 0.3f + (i % 5) * 0.15f
+                    val particleX = ((i * 73f + timeSec * 45f * speedFactor + panX) % width + width) % width
+                    val particleY = ((i * 127f - timeSec * 25f * speedFactor + panY) % height + height) % height
+                    val particleRadius = (2f + (i % 4) * 2f) * zoomScale
+                    val particleAlpha = (0.3f + 0.4f * sin((timeSec + i).toDouble()).toFloat()).coerceIn(0f, 1f) * transitionAlpha
+
+                    drawCircle(
+                        color = if (i % 2 == 0) primaryColor.copy(alpha = particleAlpha) else Color.White.copy(alpha = particleAlpha),
+                        radius = particleRadius,
+                        center = Offset(particleX, particleY)
+                    )
+                }
+
+                // 6. Foreground Focal Framing Elements
+                val foregroundPath = Path().apply {
+                    val groundY = height * 0.82f - panY * 0.5f
+                    moveTo(0f, groundY)
+                    cubicTo(
+                        width * 0.25f, groundY - 20f * zoomScale,
+                        width * 0.75f, groundY + 30f * zoomScale,
+                        width, groundY - 10f * zoomScale
+                    )
+                    lineTo(width, height)
+                    lineTo(0f, height)
+                    close()
+                }
+                drawPath(
+                    path = foregroundPath,
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            secondaryColor.copy(alpha = 0.85f * transitionAlpha),
+                            darkBaseColor.copy(alpha = transitionAlpha)
+                        ),
+                        startY = height * 0.8f,
+                        endY = height
+                    )
+                )
+
+                // 7. Anamorphic Lens Flare
+                drawLine(
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            primaryColor.copy(alpha = 0.6f * transitionAlpha),
+                            Color.White.copy(alpha = 0.9f * transitionAlpha),
+                            primaryColor.copy(alpha = 0.6f * transitionAlpha),
+                            Color.Transparent
+                        )
+                    ),
+                    start = Offset(0f, sunCenterY),
+                    end = Offset(width, sunCenterY),
+                    strokeWidth = 2.5f
+                )
+            }
+        }
+    }
+
+    // 8. Beat Transient Pulse Effect
+    if (isNearBeatTransient) {
         drawCircle(
-            color = if (i % 2 == 0) primaryColor.copy(alpha = particleAlpha) else Color.White.copy(alpha = particleAlpha),
-            radius = particleRadius,
-            center = Offset(particleX, particleY)
-        )
-    }
-
-    // 6. Foreground Focal Framing Elements
-    val foregroundPath = Path().apply {
-        val groundY = height * 0.82f - panY * 0.5f
-        moveTo(0f, groundY)
-        cubicTo(
-            width * 0.25f, groundY - 20f * zoomScale,
-            width * 0.75f, groundY + 30f * zoomScale,
-            width, groundY - 10f * zoomScale
-        )
-        lineTo(width, height)
-        lineTo(0f, height)
-        close()
-    }
-    drawPath(
-        path = foregroundPath,
-        brush = Brush.verticalGradient(
-            colors = listOf(
-                secondaryColor.copy(alpha = 0.85f),
-                darkBaseColor
+            brush = Brush.radialGradient(
+                colors = listOf(
+                    CinemaCyan.copy(alpha = 0.28f),
+                    CinemaPink.copy(alpha = 0.12f),
+                    Color.Transparent
+                ),
+                center = Offset(width / 2f, height / 2f),
+                radius = width * 0.55f
             ),
-            startY = height * 0.8f,
-            endY = height
+            radius = width * 0.55f,
+            center = Offset(width / 2f, height / 2f)
         )
-    )
+    }
 
-    // 7. Cinematic Lens Flare Horizontal Streak (Anamorphic 2.39 look)
-    drawLine(
-        brush = Brush.horizontalGradient(
-            colors = listOf(
-                Color.Transparent,
-                primaryColor.copy(alpha = 0.6f),
-                Color.White.copy(alpha = 0.9f),
-                primaryColor.copy(alpha = 0.6f),
-                Color.Transparent
+    // 9. Filter Grading Post-Processing Layer
+    when (project.filterGrading) {
+        "Teal & Orange" -> {
+            // Teal shadow wash + Orange highlight wash
+            drawRect(
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        Color(0x35008080), // Teal in shadows / top
+                        Color(0x28FFA500)  // Warm Orange in highlights
+                    )
+                ),
+                size = size
             )
-        ),
-        start = Offset(0f, sunCenterY),
-        end = Offset(width, sunCenterY),
-        strokeWidth = 2.5f
-    )
+        }
+        "Moody Monochrome" -> {
+            // Noir high contrast monochrome & vignette
+            drawRect(
+                color = Color(0x751E293B),
+                size = size
+            )
+            drawRect(
+                brush = Brush.radialGradient(
+                    colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.65f)),
+                    center = Offset(width / 2f, height / 2f),
+                    radius = width * 0.7f
+                ),
+                size = size
+            )
+        }
+        "Cyberpunk Neon" -> {
+            // Saturated magenta/cyan tint wash & glowing border
+            drawRect(
+                brush = Brush.linearGradient(
+                    colors = listOf(
+                        Color(0x22EC4899),
+                        Color(0x2200F2FE)
+                    )
+                ),
+                size = size
+            )
+            drawRect(
+                color = CinemaCyan.copy(alpha = 0.25f),
+                style = Stroke(width = 3f),
+                size = size
+            )
+        }
+        "Vintage VHS" -> {
+            // Horizontal CRT scanlines every 4px
+            val scanlineCount = (height / 4).toInt()
+            for (i in 0 until scanlineCount step 2) {
+                drawLine(
+                    color = Color.Black.copy(alpha = 0.22f),
+                    start = Offset(0f, i * 4f),
+                    end = Offset(width, i * 4f),
+                    strokeWidth = 1.5f
+                )
+            }
+            // RGB chromatic shift jitter line
+            val glitchY = (timeSec * 80f) % height
+            drawLine(
+                color = Color.Cyan.copy(alpha = 0.45f),
+                start = Offset(0f, glitchY),
+                end = Offset(width, glitchY),
+                strokeWidth = 2f
+            )
+        }
+    }
 }
+
 
 private fun DrawScope.drawCinematicMountains(
     width: Float,
@@ -732,6 +955,78 @@ private fun DrawScope.drawCyberpunkSkyline(
                         size = Size(4f, 6f)
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun AutoCaptionsOverlayView(
+    caption: CaptionSegment,
+    style: String,
+    currentMs: Long,
+    modifier: Modifier = Modifier
+) {
+    val duration = (caption.endMs - caption.startMs).coerceAtLeast(100L)
+    val progress = ((currentMs - caption.startMs).toFloat() / duration).coerceIn(0f, 1f)
+    val words = remember(caption.text) { caption.text.split(" ").filter { it.isNotBlank() } }
+    val activeWordIndex = if (words.isNotEmpty()) {
+        (progress * words.size).toInt().coerceIn(0, words.size - 1)
+    } else 0
+
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(8.dp),
+        color = Color.Black.copy(alpha = 0.72f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.2f))
+    ) {
+        when {
+            style.contains("Word", ignoreCase = true) -> {
+                // Word-by-Word Pop
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    words.forEachIndexed { idx, word ->
+                        val isCurrent = idx == activeWordIndex
+                        Text(
+                            text = "$word ",
+                            color = if (isCurrent) ThemeManager.primaryAccent else Color.White,
+                            fontSize = if (isCurrent) 17.sp else 14.sp,
+                            fontWeight = if (isCurrent) FontWeight.ExtraBold else FontWeight.Medium
+                        )
+                    }
+                }
+            }
+            style.contains("Karaoke", ignoreCase = true) -> {
+                // Karaoke Highlight
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    words.forEachIndexed { idx, word ->
+                        val isPastOrCurrent = idx <= activeWordIndex
+                        Text(
+                            text = "$word ",
+                            color = if (isPastOrCurrent) CinemaAmber else Color.White.copy(alpha = 0.6f),
+                            fontSize = 15.sp,
+                            fontWeight = if (isPastOrCurrent) FontWeight.Bold else FontWeight.Normal
+                        )
+                    }
+                }
+            }
+            else -> {
+                // Bold Cinematic Lower Third
+                Text(
+                    text = caption.text,
+                    color = Color.White,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
             }
         }
     }

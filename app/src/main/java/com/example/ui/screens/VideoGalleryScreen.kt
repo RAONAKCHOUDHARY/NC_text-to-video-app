@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -23,20 +24,26 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.HighQuality
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -48,6 +55,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -55,21 +63,16 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.VideoProject
+import com.example.ui.components.ExportEngineBottomSheet
 import com.example.ui.theme.CinemaAmber
-import com.example.ui.theme.CinemaBackground
-import com.example.ui.theme.CinemaCyan
 import com.example.ui.theme.CinemaPink
 import com.example.ui.theme.CinemaPurple
-import com.example.ui.theme.CinemaSurface
-import com.example.ui.theme.CinemaSurfaceBorder
-import com.example.ui.theme.CinemaSurfaceElevated
-import com.example.ui.theme.TextMuted
-import com.example.ui.theme.TextPrimary
-import com.example.ui.theme.TextSecondary
+import com.example.ui.theme.ThemeManager
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VideoGalleryScreen(
     projects: List<VideoProject>,
@@ -78,7 +81,10 @@ fun VideoGalleryScreen(
     onNewVideoClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     var showOnlyFavorites by remember { mutableStateOf(false) }
+    var exportProjectTarget by remember { mutableStateOf<VideoProject?>(null) }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     val filteredProjects = remember(projects, showOnlyFavorites) {
         if (showOnlyFavorites) projects.filter { it.isFavorite } else projects
@@ -87,7 +93,7 @@ fun VideoGalleryScreen(
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .background(CinemaBackground)
+            .background(ThemeManager.backgroundColor)
             .testTag("gallery_screen"),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
@@ -101,14 +107,14 @@ fun VideoGalleryScreen(
             ) {
                 Column {
                     Text(
-                        text = "Video Vault",
-                        color = TextPrimary,
+                        text = "Studio Gallery & Vault",
+                        color = ThemeManager.textPrimaryColor,
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "${projects.size} Created AI Videos",
-                        color = TextSecondary,
+                        text = "${projects.size} AI Projects • Downloads & Exports",
+                        color = ThemeManager.textSecondaryColor,
                         fontSize = 12.sp
                     )
                 }
@@ -121,11 +127,11 @@ fun VideoGalleryScreen(
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = CinemaPink.copy(alpha = 0.2f),
                         selectedLabelColor = CinemaPink,
-                        containerColor = CinemaSurface,
-                        labelColor = TextSecondary
+                        containerColor = ThemeManager.surfaceColor,
+                        labelColor = ThemeManager.textSecondaryColor
                     ),
                     border = FilterChipDefaults.filterChipBorder(
-                        borderColor = if (showOnlyFavorites) CinemaPink else CinemaSurfaceBorder,
+                        borderColor = if (showOnlyFavorites) CinemaPink else ThemeManager.surfaceBorderColor,
                         selectedBorderColor = CinemaPink,
                         enabled = true,
                         selected = showOnlyFavorites
@@ -150,13 +156,13 @@ fun VideoGalleryScreen(
                         Box(
                             modifier = Modifier
                                 .size(64.dp)
-                                .background(CinemaSurfaceElevated, CircleShape),
+                                .background(ThemeManager.surfaceElevatedColor, CircleShape),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Default.VideoLibrary,
                                 contentDescription = null,
-                                tint = CinemaCyan,
+                                tint = ThemeManager.primaryAccent,
                                 modifier = Modifier.size(32.dp)
                             )
                         }
@@ -165,7 +171,7 @@ fun VideoGalleryScreen(
 
                         Text(
                             text = if (showOnlyFavorites) "No Favorite Videos Yet" else "No Videos Generated Yet",
-                            color = TextPrimary,
+                            color = ThemeManager.textPrimaryColor,
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -174,8 +180,8 @@ fun VideoGalleryScreen(
 
                         Text(
                             text = if (showOnlyFavorites) "Tap the heart icon on any video to bookmark it here."
-                            else "Type any prompt in the Studio tab to generate your first cinematic video.",
-                            color = TextMuted,
+                            else "Type any prompt or pick a photo in the Video Studio tab to generate your first AI video clip.",
+                            color = ThemeManager.textMutedColor,
                             fontSize = 13.sp,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center
                         )
@@ -185,8 +191,8 @@ fun VideoGalleryScreen(
                         Button(
                             onClick = onNewVideoClick,
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = CinemaCyan,
-                                contentColor = CinemaBackground
+                                containerColor = ThemeManager.primaryAccent,
+                                contentColor = Color.Black
                             ),
                             shape = RoundedCornerShape(12.dp)
                         ) {
@@ -204,7 +210,8 @@ fun VideoGalleryScreen(
             VideoProjectCard(
                 project = project,
                 onClick = { onSelectProject(project) },
-                onToggleFavorite = { onToggleFavorite(project) }
+                onToggleFavorite = { onToggleFavorite(project) },
+                onExportClick = { exportProjectTarget = project }
             )
         }
 
@@ -212,13 +219,26 @@ fun VideoGalleryScreen(
             Spacer(modifier = Modifier.height(24.dp))
         }
     }
+
+    // Export Bottom Sheet
+    exportProjectTarget?.let { proj ->
+        ExportEngineBottomSheet(
+            project = proj,
+            sheetState = sheetState,
+            onDismiss = { exportProjectTarget = null },
+            onExportComplete = { res, fps, path ->
+                Toast.makeText(context, "Exported successfully to $path", Toast.LENGTH_SHORT).show()
+            }
+        )
+    }
 }
 
 @Composable
 private fun VideoProjectCard(
     project: VideoProject,
     onClick: () -> Unit,
-    onToggleFavorite: () -> Unit
+    onToggleFavorite: () -> Unit,
+    onExportClick: () -> Unit
 ) {
     val dateStr = remember(project.createdAt) {
         val sdf = SimpleDateFormat("MMM d, yyyy", Locale.getDefault())
@@ -232,8 +252,8 @@ private fun VideoProjectCard(
             .clickable { onClick() }
             .testTag("video_card_${project.id}"),
         shape = RoundedCornerShape(16.dp),
-        color = CinemaSurface,
-        border = BorderStroke(1.dp, CinemaSurfaceBorder)
+        color = ThemeManager.surfaceColor,
+        border = BorderStroke(1.dp, ThemeManager.surfaceBorderColor)
     ) {
         Column {
             // Thumbnail Canvas Preview
@@ -243,21 +263,19 @@ private fun VideoProjectCard(
                     .aspectRatio(16f / 8.5f)
                     .background(Color.Black)
             ) {
-                // Generative Poster Canvas
                 Canvas(modifier = Modifier.fillMaxSize()) {
                     val w = size.width
                     val h = size.height
                     val isCyber = project.style.contains("Cyber", ignoreCase = true)
 
                     val topColor = if (isCyber) Color(0xFF0F172A) else Color(0xFF1E1B4B)
-                    val midColor = if (isCyber) CinemaCyan.copy(alpha = 0.6f) else CinemaPurple.copy(alpha = 0.5f)
+                    val midColor = if (isCyber) ThemeManager.primaryAccent.copy(alpha = 0.6f) else CinemaPurple.copy(alpha = 0.5f)
                     val bottomColor = if (isCyber) CinemaPink.copy(alpha = 0.3f) else CinemaAmber.copy(alpha = 0.4f)
 
                     drawRect(
                         brush = Brush.verticalGradient(listOf(topColor, midColor, bottomColor))
                     )
 
-                    // Sun or Orb
                     drawCircle(
                         color = Color.White.copy(alpha = 0.8f),
                         radius = 24.dp.toPx(),
@@ -265,7 +283,7 @@ private fun VideoProjectCard(
                     )
                 }
 
-                // Play Button Overlay in center
+                // Play Button Overlay
                 Box(
                     modifier = Modifier
                         .align(Alignment.Center)
@@ -276,12 +294,12 @@ private fun VideoProjectCard(
                     Icon(
                         imageVector = Icons.Default.PlayArrow,
                         contentDescription = "Play",
-                        tint = CinemaCyan,
+                        tint = ThemeManager.primaryAccent,
                         modifier = Modifier.size(26.dp)
                     )
                 }
 
-                // Top Left: Style & Aspect Badge
+                // Top Left: Badges (Style, Aspect, Image/Text)
                 Row(
                     modifier = Modifier
                         .align(Alignment.TopStart)
@@ -293,8 +311,8 @@ private fun VideoProjectCard(
                         color = Color.Black.copy(alpha = 0.7f)
                     ) {
                         Text(
-                            text = project.style,
-                            color = CinemaCyan,
+                            text = if (project.sourceType == "image") "PHOTO ANIMATION" else project.style.uppercase(),
+                            color = ThemeManager.primaryAccent,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
@@ -307,11 +325,27 @@ private fun VideoProjectCard(
                     ) {
                         Text(
                             text = project.aspectRatio,
-                            color = TextPrimary,
+                            color = Color.White,
                             fontSize = 10.sp,
                             fontFamily = FontFamily.Monospace,
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
                         )
+                    }
+
+                    if (project.hasVoiceover) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = CinemaPurple.copy(alpha = 0.85f)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(imageVector = Icons.Default.Mic, contentDescription = null, tint = Color.White, modifier = Modifier.size(10.dp))
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Text("VOICE", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            }
+                        }
                     }
                 }
 
@@ -325,7 +359,7 @@ private fun VideoProjectCard(
                 ) {
                     Text(
                         text = "00:${String.format(Locale.US, "%02d", project.durationSeconds)}",
-                        color = TextPrimary,
+                        color = Color.White,
                         fontSize = 11.sp,
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Medium,
@@ -334,7 +368,7 @@ private fun VideoProjectCard(
                 }
             }
 
-            // Card Text Info
+            // Card Body Info
             Column(modifier = Modifier.padding(14.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -343,7 +377,7 @@ private fun VideoProjectCard(
                 ) {
                     Text(
                         text = project.title,
-                        color = TextPrimary,
+                        color = ThemeManager.textPrimaryColor,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
@@ -351,16 +385,30 @@ private fun VideoProjectCard(
                         modifier = Modifier.weight(1f)
                     )
 
-                    IconButton(
-                        onClick = onToggleFavorite,
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            imageVector = if (project.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                            contentDescription = "Favorite",
-                            tint = if (project.isFavorite) CinemaPink else TextMuted,
-                            modifier = Modifier.size(18.dp)
-                        )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(
+                            onClick = onExportClick,
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Download,
+                                contentDescription = "Export",
+                                tint = ThemeManager.primaryAccent,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+
+                        IconButton(
+                            onClick = onToggleFavorite,
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (project.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                contentDescription = "Favorite",
+                                tint = if (project.isFavorite) CinemaPink else ThemeManager.textMutedColor,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     }
                 }
 
@@ -368,7 +416,7 @@ private fun VideoProjectCard(
 
                 Text(
                     text = project.prompt,
-                    color = TextSecondary,
+                    color = ThemeManager.textSecondaryColor,
                     fontSize = 12.sp,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
@@ -383,14 +431,14 @@ private fun VideoProjectCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "${project.cameraMotion} • ${project.lighting}",
-                        color = TextMuted,
+                        text = "${project.cameraMotion} • ${project.fps} FPS",
+                        color = ThemeManager.textMutedColor,
                         fontSize = 11.sp
                     )
 
                     Text(
                         text = dateStr,
-                        color = TextMuted,
+                        color = ThemeManager.textMutedColor,
                         fontSize = 11.sp
                     )
                 }

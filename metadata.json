@@ -1,6 +1,6 @@
 {
-  "name": "Text to Video",
-  "description": "AI-powered text to video generator creating cinematic videos, visual storyboards, and dynamic animated scenes from text prompts.",
+  "name": "PulseCraft Studio",
+  "description": "Creative video & audio editing suite featuring dual-track canvas transforms, beat transient detection, dynamic auto-captions, filter grading, and multi-layer audio mixing.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

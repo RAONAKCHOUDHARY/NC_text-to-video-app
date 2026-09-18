@@ -1,5 +1,9 @@
 package com.example.ui.screens
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -23,25 +27,29 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
+import androidx.compose.material3.TabRowDefaults
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
@@ -54,27 +62,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.ui.theme.AccentGradientEnd
-import com.example.ui.theme.AccentGradientStart
+import coil.compose.AsyncImage
 import com.example.ui.theme.CinemaAmber
-import com.example.ui.theme.CinemaBackground
-import com.example.ui.theme.CinemaCyan
 import com.example.ui.theme.CinemaPurple
-import com.example.ui.theme.CinemaSurface
-import com.example.ui.theme.CinemaSurfaceBorder
-import com.example.ui.theme.CinemaSurfaceElevated
-import com.example.ui.theme.TextMuted
-import com.example.ui.theme.TextPrimary
-import com.example.ui.theme.TextSecondary
+import com.example.ui.theme.ThemeManager
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StudioGeneratorScreen(
     isGenerating: Boolean,
@@ -91,39 +90,58 @@ fun StudioGeneratorScreen(
         duration: Int,
         fps: Int,
         motionIntensity: Float,
-        audioMood: String
+        audioMood: String,
+        sourceType: String,
+        sourceImageUri: String?
     ) -> Unit,
+    onOpenThemeSettings: () -> Unit,
+    onSwitchToEditor: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    var prompt by remember {
+    var creationMode by remember { mutableIntStateOf(0) } // 0: Text-to-Video, 1: Image-to-Video
+    var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
+
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri: Uri? ->
+        selectedImageUri = uri
+    }
+
+    var textPrompt by remember {
         mutableStateOf("Cinematic drone flight over misty pine forests at golden hour with glowing sunbeams")
+    }
+
+    var imageMotionPrompt by remember {
+        mutableStateOf("Animate realistic water flowing with dramatic sunset lighting and slow camera orbit push-in")
     }
 
     var selectedStyle by remember { mutableStateOf("Cinematic Film") }
     var selectedAspectRatio by remember { mutableStateOf("16:9") }
-    var selectedCameraMotion by remember { mutableStateOf("Drone Flyover") }
+    var selectedCameraMotion by remember { mutableStateOf("Cinematic Orbit") }
     var selectedLighting by remember { mutableStateOf("Golden Hour") }
     var selectedAudioMood by remember { mutableStateOf("ambient_synth") }
-    var selectedDuration by remember { mutableIntStateOf(8) }
+    var selectedDuration by remember { mutableIntStateOf(10) } // 5, 10, 15, 30, 60
     var selectedFps by remember { mutableIntStateOf(30) }
     var motionIntensity by remember { mutableFloatStateOf(0.75f) }
     var showAdvancedSettings by remember { mutableStateOf(false) }
 
     val styles = listOf(
-        "Cinematic Film", "Cyberpunk", "Anime", "Studio Ghibli",
+        "Cinematic Film", "3D Anime Studio", "Indian Cartoon 3D Style",
+        "Cyberpunk", "Anime", "Studio Ghibli",
         "Sci-Fi", "Nature Documentary", "Film Noir"
     )
 
     val aspectRatios = listOf(
-        Pair("16:9", "Cinema"),
+        Pair("16:9", "YouTube/Cinema"),
         Pair("9:16", "Shorts/Reels"),
         Pair("1:1", "Square"),
-        Pair("4:3", "Classic")
+        Pair("4:5", "Social"),
+        Pair("21:9", "Scope")
     )
 
     val cameraMotions = listOf(
-        "Drone Flyover", "Cinematic Orbit", "Dynamic Zoom In",
-        "Slow Pan Right", "Dolly Forward", "Static Tripod"
+        "Cinematic Orbit", "Slow Pan Right", "Dynamic Zoom In",
+        "Drone Flyover", "Dolly Forward", "Static Tripod"
     )
 
     val lightings = listOf(
@@ -131,15 +149,17 @@ fun StudioGeneratorScreen(
         "Volumetric Fog", "Dramatic Studio", "Pastel Sunrise"
     )
 
-    val audioMoods = listOf(
-        Pair("ambient_synth", "Warm Synth Pad"),
-        Pair("cinematic_drone", "Sub-Bass Drone"),
-        Pair("cyber_pulse", "Cyberpunk Arp"),
-        Pair("nature_wind", "Ambient Wind"),
-        Pair("none", "Muted")
+    val durationOptions = listOf(5, 10, 15, 30, 60)
+
+    val imageMotionPresets = listOf(
+        "3D Parallax Depth & Camera Push-In",
+        "Gentle Floating Dust & Ambient Light Ray Sweep",
+        "Liquid Water Wave Dynamics & Wind Sway",
+        "Bioluminescent Pulsing Glow & Particle Burst",
+        "Cinematic Slow Motion Drift"
     )
 
-    val promptPresets = listOf(
+    val textPromptPresets = listOf(
         "Cyberpunk neon street market with flying cars in heavy rain",
         "Floating bioluminescent jellyfish in deep sapphire oceanic abyss",
         "Cosmic supernova birthing gold spiral nebula in deep space",
@@ -150,20 +170,24 @@ fun StudioGeneratorScreen(
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .background(CinemaBackground)
+            .background(ThemeManager.backgroundColor)
             .testTag("generator_screen"),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Hero Header
+        // Hero Header & Theme Settings Button
         item {
-            Column {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
-                            .size(36.dp)
+                            .size(38.dp)
                             .background(
-                                Brush.linearGradient(listOf(CinemaPurple, CinemaCyan)),
+                                ThemeManager.primaryAccent.copy(alpha = 0.18f),
                                 RoundedCornerShape(10.dp)
                             ),
                         contentAlignment = Alignment.Center
@@ -171,35 +195,217 @@ fun StudioGeneratorScreen(
                         Icon(
                             imageVector = Icons.Default.Videocam,
                             contentDescription = null,
-                            tint = CinemaBackground,
+                            tint = ThemeManager.primaryAccent,
                             modifier = Modifier.size(22.dp)
                         )
                     }
-                    Spacer(modifier = Modifier.width(10.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(
                             text = "AI Video Studio",
-                            color = TextPrimary,
+                            color = ThemeManager.textPrimaryColor,
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Describe your scene & render in 4K",
-                            color = TextSecondary,
+                            text = "Text-to-Video & Image-to-Video Engine",
+                            color = ThemeManager.textSecondaryColor,
                             fontSize = 12.sp
+                        )
+                    }
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (onSwitchToEditor != null) {
+                        IconButton(
+                            onClick = onSwitchToEditor,
+                            modifier = Modifier
+                                .size(36.dp)
+                                .background(ThemeManager.primaryAccent.copy(alpha = 0.15f), CircleShape)
+                                .testTag("switch_to_editor_header_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Tune,
+                                contentDescription = "Open Creative Editor",
+                                tint = ThemeManager.primaryAccent,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+
+                    IconButton(
+                        onClick = onOpenThemeSettings,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(ThemeManager.surfaceElevatedColor, CircleShape)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Palette,
+                            contentDescription = "Theme Settings",
+                            tint = ThemeManager.primaryAccent,
+                            modifier = Modifier.size(18.dp)
                         )
                     }
                 }
             }
         }
 
-        // Prompt Input Card
+        // Mode Switcher: Text-to-Video vs Image-to-Video
+        item {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                color = ThemeManager.surfaceColor,
+                border = BorderStroke(1.dp, ThemeManager.surfaceBorderColor)
+            ) {
+                TabRow(
+                    selectedTabIndex = creationMode,
+                    containerColor = Color.Transparent,
+                    contentColor = ThemeManager.primaryAccent,
+                    indicator = { tabPositions ->
+                        TabRowDefaults.SecondaryIndicator(
+                            Modifier.tabIndicatorOffset(tabPositions[creationMode]),
+                            color = ThemeManager.primaryAccent
+                        )
+                    }
+                ) {
+                    Tab(
+                        selected = creationMode == 0,
+                        onClick = { creationMode = 0 },
+                        text = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(imageVector = Icons.Default.Movie, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Text to Video", fontWeight = if (creationMode == 0) FontWeight.Bold else FontWeight.Normal)
+                            }
+                        }
+                    )
+                    Tab(
+                        selected = creationMode == 1,
+                        onClick = { creationMode = 1 },
+                        text = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(imageVector = Icons.Default.Image, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Image to Video", fontWeight = if (creationMode == 1) FontWeight.Bold else FontWeight.Normal)
+                            }
+                        }
+                    )
+                }
+            }
+        }
+
+        // Image Picker Card (Only in Image-to-Video mode)
+        if (creationMode == 1) {
+            item {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    color = ThemeManager.surfaceColor,
+                    border = BorderStroke(1.dp, ThemeManager.surfaceBorderColor)
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            text = "SOURCE IMAGE",
+                            color = ThemeManager.primaryAccent,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        if (selectedImageUri != null) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(180.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Color.Black)
+                            ) {
+                                AsyncImage(
+                                    model = selectedImageUri,
+                                    contentDescription = "Selected Image",
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+
+                                Button(
+                                    onClick = {
+                                        photoPickerLauncher.launch(
+                                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                        )
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color.Black.copy(alpha = 0.75f),
+                                        contentColor = Color.White
+                                    ),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier
+                                        .align(Alignment.BottomEnd)
+                                        .padding(10.dp)
+                                        .height(34.dp)
+                                ) {
+                                    Icon(imageVector = Icons.Default.AddPhotoAlternate, contentDescription = null, modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Change Photo", fontSize = 11.sp)
+                                }
+                            }
+                        } else {
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(130.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable {
+                                        photoPickerLauncher.launch(
+                                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                        )
+                                    }
+                                    .testTag("upload_photo_card"),
+                                color = ThemeManager.surfaceElevatedColor,
+                                border = BorderStroke(1.dp, ThemeManager.primaryAccent.copy(alpha = 0.5f)),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier.fillMaxSize(),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.AddPhotoAlternate,
+                                        contentDescription = null,
+                                        tint = ThemeManager.primaryAccent,
+                                        modifier = Modifier.size(36.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "Tap to Pick Photo from Device",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = ThemeManager.textPrimaryColor
+                                    )
+                                    Text(
+                                        text = "Animate any portrait, landscape, or artwork",
+                                        fontSize = 11.sp,
+                                        color = ThemeManager.textMutedColor
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Prompt Input Card (Text Prompt or Motion Prompt)
         item {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
-                color = CinemaSurface,
-                border = BorderStroke(1.dp, CinemaSurfaceBorder)
+                color = ThemeManager.surfaceColor,
+                border = BorderStroke(1.dp, ThemeManager.surfaceBorderColor)
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {
                     Row(
@@ -208,8 +414,8 @@ fun StudioGeneratorScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "PROMPT",
-                            color = CinemaCyan,
+                            text = if (creationMode == 0) "SCENE PROMPT" else "MOTION ANIMATION PROMPT",
+                            color = ThemeManager.primaryAccent,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 1.sp
@@ -218,19 +424,20 @@ fun StudioGeneratorScreen(
                         // AI Enhance Button
                         Button(
                             onClick = {
+                                val currentP = if (creationMode == 0) textPrompt else imageMotionPrompt
                                 onEnhancePrompt(
-                                    prompt,
+                                    currentP,
                                     selectedStyle,
                                     selectedCameraMotion,
                                     selectedLighting
                                 ) { enhanced ->
-                                    prompt = enhanced
+                                    if (creationMode == 0) textPrompt = enhanced else imageMotionPrompt = enhanced
                                 }
                             },
-                            enabled = !isEnhancingPrompt && prompt.isNotBlank(),
+                            enabled = !isEnhancingPrompt,
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = CinemaSurfaceElevated,
-                                contentColor = CinemaCyan
+                                containerColor = ThemeManager.surfaceElevatedColor,
+                                contentColor = ThemeManager.primaryAccent
                             ),
                             shape = RoundedCornerShape(20.dp),
                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
@@ -241,7 +448,7 @@ fun StudioGeneratorScreen(
                             if (isEnhancingPrompt) {
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(14.dp),
-                                    color = CinemaCyan,
+                                    color = ThemeManager.primaryAccent,
                                     strokeWidth = 2.dp
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
@@ -262,25 +469,28 @@ fun StudioGeneratorScreen(
                     Spacer(modifier = Modifier.height(8.dp))
 
                     OutlinedTextField(
-                        value = prompt,
-                        onValueChange = { prompt = it },
+                        value = if (creationMode == 0) textPrompt else imageMotionPrompt,
+                        onValueChange = {
+                            if (creationMode == 0) textPrompt = it else imageMotionPrompt = it
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(110.dp)
+                            .height(100.dp)
                             .testTag("prompt_input_field"),
                         placeholder = {
                             Text(
-                                "Describe what you want to see in the video (subject, environment, mood, lighting)...",
-                                color = TextMuted,
+                                if (creationMode == 0) "Describe your scene (subject, setting, mood, action)..."
+                                else "Describe motion dynamics (e.g. animate camera orbit, water flowing, wind in hair)...",
+                                color = ThemeManager.textMutedColor,
                                 fontSize = 13.sp
                             )
                         },
                         colors = TextFieldDefaults.colors(
-                            focusedContainerColor = CinemaSurfaceElevated,
-                            unfocusedContainerColor = CinemaSurfaceElevated,
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextPrimary,
-                            focusedIndicatorColor = CinemaCyan,
+                            focusedContainerColor = ThemeManager.surfaceElevatedColor,
+                            unfocusedContainerColor = ThemeManager.surfaceElevatedColor,
+                            focusedTextColor = ThemeManager.textPrimaryColor,
+                            unfocusedTextColor = ThemeManager.textPrimaryColor,
+                            focusedIndicatorColor = ThemeManager.primaryAccent,
                             unfocusedIndicatorColor = Color.Transparent
                         ),
                         shape = RoundedCornerShape(12.dp)
@@ -288,10 +498,10 @@ fun StudioGeneratorScreen(
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // Preset prompt chips
+                    // Inspirations / Motion Presets
                     Text(
-                        text = "Inspirations:",
-                        color = TextMuted,
+                        text = if (creationMode == 0) "Prompt Inspirations:" else "Motion Dynamics Presets:",
+                        color = ThemeManager.textMutedColor,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Medium
                     )
@@ -304,17 +514,20 @@ fun StudioGeneratorScreen(
                             .horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        promptPresets.forEach { preset ->
+                        val presets = if (creationMode == 0) textPromptPresets else imageMotionPresets
+                        presets.forEach { preset ->
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(8.dp))
-                                    .background(CinemaSurfaceElevated)
-                                    .clickable { prompt = preset }
+                                    .background(ThemeManager.surfaceElevatedColor)
+                                    .clickable {
+                                        if (creationMode == 0) textPrompt = preset else imageMotionPrompt = preset
+                                    }
                                     .padding(horizontal = 10.dp, vertical = 6.dp)
                             ) {
                                 Text(
-                                    text = preset.take(32) + "...",
-                                    color = TextSecondary,
+                                    text = preset.take(34) + "...",
+                                    color = ThemeManager.textSecondaryColor,
                                     fontSize = 11.sp
                                 )
                             }
@@ -324,49 +537,60 @@ fun StudioGeneratorScreen(
             }
         }
 
-        // Aspect Ratio Selector
+        // Duration Selector (5s, 10s, 15s, 30s, 60s)
         item {
             Column {
-                Text(
-                    text = "ASPECT RATIO",
-                    color = TextSecondary,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp
-                )
-                Spacer(modifier = Modifier.height(8.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    aspectRatios.forEach { (ratio, label) ->
-                        val isSelected = selectedAspectRatio == ratio
+                    Text(
+                        text = "CLIP DURATION",
+                        color = ThemeManager.textSecondaryColor,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp
+                    )
+                    Text(
+                        text = "${selectedDuration} Seconds",
+                        color = ThemeManager.primaryAccent,
+                        fontSize = 12.sp,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    durationOptions.forEach { dur ->
+                        val isSelected = selectedDuration == dur
                         Surface(
                             modifier = Modifier
                                 .weight(1f)
-                                .clickable { selectedAspectRatio = ratio }
-                                .testTag("ratio_button_$ratio"),
-                            shape = RoundedCornerShape(12.dp),
-                            color = if (isSelected) CinemaPurple.copy(alpha = 0.25f) else CinemaSurface,
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable { selectedDuration = dur }
+                                .testTag("duration_$dur"),
+                            color = if (isSelected) ThemeManager.primaryAccent.copy(alpha = 0.2f) else ThemeManager.surfaceColor,
                             border = BorderStroke(
                                 1.dp,
-                                if (isSelected) CinemaCyan else CinemaSurfaceBorder
-                            )
+                                if (isSelected) ThemeManager.primaryAccent else ThemeManager.surfaceBorderColor
+                            ),
+                            shape = RoundedCornerShape(10.dp)
                         ) {
                             Column(
                                 modifier = Modifier.padding(vertical = 10.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
                                 Text(
-                                    text = ratio,
-                                    color = if (isSelected) CinemaCyan else TextPrimary,
+                                    text = "${dur}s",
                                     fontSize = 14.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = label,
-                                    color = if (isSelected) TextPrimary else TextMuted,
-                                    fontSize = 10.sp
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSelected) ThemeManager.primaryAccent else ThemeManager.textPrimaryColor
                                 )
                             }
                         }
@@ -375,59 +599,13 @@ fun StudioGeneratorScreen(
             }
         }
 
-        // Cinematic Style Selector
+        // Camera Motion Selector (Orbit, Slow Pan, Zoom, Drone, Dolly, etc.)
         item {
             Column {
                 Text(
-                    text = "VISUAL STYLE",
-                    color = TextSecondary,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    styles.forEach { style ->
-                        val isSelected = selectedStyle == style
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(20.dp))
-                                .background(
-                                    if (isSelected) CinemaCyan.copy(alpha = 0.2f) else CinemaSurface
-                                )
-                                .border(
-                                    1.dp,
-                                    if (isSelected) CinemaCyan else CinemaSurfaceBorder,
-                                    RoundedCornerShape(20.dp)
-                                )
-                                .clickable { selectedStyle = style }
-                                .padding(horizontal = 14.dp, vertical = 8.dp)
-                                .testTag("style_chip_$style")
-                        ) {
-                            Text(
-                                text = style,
-                                color = if (isSelected) CinemaCyan else TextPrimary,
-                                fontSize = 12.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // Camera Motion Selector
-        item {
-            Column {
-                Text(
-                    text = "CAMERA MOVEMENT",
-                    color = TextSecondary,
-                    fontSize = 12.sp,
+                    text = "CAMERA CONTROLS",
+                    color = ThemeManager.textSecondaryColor,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 1.sp
                 )
@@ -444,19 +622,20 @@ fun StudioGeneratorScreen(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(20.dp))
                                 .background(
-                                    if (isSelected) CinemaPurple.copy(alpha = 0.25f) else CinemaSurface
+                                    if (isSelected) CinemaPurple.copy(alpha = 0.25f) else ThemeManager.surfaceColor
                                 )
                                 .border(
                                     1.dp,
-                                    if (isSelected) CinemaPurple else CinemaSurfaceBorder,
+                                    if (isSelected) CinemaPurple else ThemeManager.surfaceBorderColor,
                                     RoundedCornerShape(20.dp)
                                 )
                                 .clickable { selectedCameraMotion = motion }
                                 .padding(horizontal = 14.dp, vertical = 8.dp)
+                                .testTag("camera_$motion")
                         ) {
                             Text(
                                 text = motion,
-                                color = if (isSelected) CinemaPurple else TextPrimary,
+                                color = if (isSelected) CinemaPurple else ThemeManager.textPrimaryColor,
                                 fontSize = 12.sp,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                             )
@@ -466,13 +645,66 @@ fun StudioGeneratorScreen(
             }
         }
 
-        // Lighting & Atmosphere
+        // Aspect Ratio Selector
         item {
             Column {
                 Text(
-                    text = "LIGHTING & MOOD",
-                    color = TextSecondary,
-                    fontSize = 12.sp,
+                    text = "ASPECT RATIO",
+                    color = ThemeManager.textSecondaryColor,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    aspectRatios.forEach { (ratio, label) ->
+                        val isSelected = selectedAspectRatio == ratio
+                        Surface(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable { selectedAspectRatio = ratio }
+                                .testTag("ratio_button_$ratio"),
+                            color = if (isSelected) ThemeManager.primaryAccent.copy(alpha = 0.2f) else ThemeManager.surfaceColor,
+                            border = BorderStroke(
+                                1.dp,
+                                if (isSelected) ThemeManager.primaryAccent else ThemeManager.surfaceBorderColor
+                            ),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(vertical = 8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = ratio,
+                                    color = if (isSelected) ThemeManager.primaryAccent else ThemeManager.textPrimaryColor,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = label.split("/").first(),
+                                    color = ThemeManager.textMutedColor,
+                                    fontSize = 9.sp,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Cinematic Style Selector
+        item {
+            Column {
+                Text(
+                    text = "VISUAL STYLE",
+                    color = ThemeManager.textSecondaryColor,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 1.sp
                 )
@@ -483,25 +715,25 @@ fun StudioGeneratorScreen(
                         .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    lightings.forEach { light ->
-                        val isSelected = selectedLighting == light
+                    styles.forEach { style ->
+                        val isSelected = selectedStyle == style
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(20.dp))
                                 .background(
-                                    if (isSelected) CinemaAmber.copy(alpha = 0.2f) else CinemaSurface
+                                    if (isSelected) ThemeManager.primaryAccent.copy(alpha = 0.2f) else ThemeManager.surfaceColor
                                 )
                                 .border(
                                     1.dp,
-                                    if (isSelected) CinemaAmber else CinemaSurfaceBorder,
+                                    if (isSelected) ThemeManager.primaryAccent else ThemeManager.surfaceBorderColor,
                                     RoundedCornerShape(20.dp)
                                 )
-                                .clickable { selectedLighting = light }
+                                .clickable { selectedStyle = style }
                                 .padding(horizontal = 14.dp, vertical = 8.dp)
                         ) {
                             Text(
-                                text = light,
-                                color = if (isSelected) CinemaAmber else TextPrimary,
+                                text = style,
+                                color = if (isSelected) ThemeManager.primaryAccent else ThemeManager.textPrimaryColor,
                                 fontSize = 12.sp,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                             )
@@ -511,200 +743,14 @@ fun StudioGeneratorScreen(
             }
         }
 
-        // Audio Soundscape Selector
-        item {
-            Column {
-                Text(
-                    text = "AMBIENT SOUNDTRACK",
-                    color = TextSecondary,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    audioMoods.forEach { (moodKey, moodLabel) ->
-                        val isSelected = selectedAudioMood == moodKey
-                        Surface(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
-                                .clickable { selectedAudioMood = moodKey },
-                            color = if (isSelected) CinemaCyan.copy(alpha = 0.2f) else CinemaSurface,
-                            border = BorderStroke(
-                                1.dp,
-                                if (isSelected) CinemaCyan else CinemaSurfaceBorder
-                            ),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.MusicNote,
-                                    contentDescription = null,
-                                    tint = if (isSelected) CinemaCyan else TextMuted,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = moodLabel,
-                                    color = if (isSelected) CinemaCyan else TextPrimary,
-                                    fontSize = 12.sp
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Advanced Settings Collapsible Accordion
-        item {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp),
-                color = CinemaSurface,
-                border = BorderStroke(1.dp, CinemaSurfaceBorder)
-            ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { showAdvancedSettings = !showAdvancedSettings },
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.Tune,
-                                contentDescription = null,
-                                tint = CinemaCyan,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Camera & Render Settings",
-                                color = TextPrimary,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                        Text(
-                            text = if (showAdvancedSettings) "Hide" else "Show",
-                            color = CinemaCyan,
-                            fontSize = 12.sp
-                        )
-                    }
-
-                    AnimatedVisibility(visible = showAdvancedSettings) {
-                        Column(modifier = Modifier.padding(top = 14.dp)) {
-                            // Duration
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text("Duration:", color = TextSecondary, fontSize = 12.sp)
-                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    listOf(4, 6, 8, 10).forEach { dur ->
-                                        Box(
-                                            modifier = Modifier
-                                                .clip(RoundedCornerShape(6.dp))
-                                                .background(
-                                                    if (selectedDuration == dur) CinemaCyan else CinemaSurfaceElevated
-                                                )
-                                                .clickable { selectedDuration = dur }
-                                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                                        ) {
-                                            Text(
-                                                text = "${dur}s",
-                                                color = if (selectedDuration == dur) CinemaBackground else TextPrimary,
-                                                fontSize = 11.sp,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            // Framerate FPS
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text("Frame Rate:", color = TextSecondary, fontSize = 12.sp)
-                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    listOf(24, 30, 60).forEach { fps ->
-                                        Box(
-                                            modifier = Modifier
-                                                .clip(RoundedCornerShape(6.dp))
-                                                .background(
-                                                    if (selectedFps == fps) CinemaPurple else CinemaSurfaceElevated
-                                                )
-                                                .clickable { selectedFps = fps }
-                                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                                        ) {
-                                            Text(
-                                                text = "$fps fps",
-                                                color = if (selectedFps == fps) TextPrimary else TextSecondary,
-                                                fontSize = 11.sp,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            // Motion Intensity Slider
-                            Column {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text("Motion Dynamics:", color = TextSecondary, fontSize = 12.sp)
-                                    Text(
-                                        "${(motionIntensity * 100).toInt()}%",
-                                        color = CinemaCyan,
-                                        fontSize = 12.sp,
-                                        fontFamily = FontFamily.Monospace
-                                    )
-                                }
-                                Slider(
-                                    value = motionIntensity,
-                                    onValueChange = { motionIntensity = it },
-                                    valueRange = 0.2f..1.0f,
-                                    colors = SliderDefaults.colors(
-                                        thumbColor = CinemaCyan,
-                                        activeTrackColor = CinemaCyan,
-                                        inactiveTrackColor = CinemaSurfaceBorder
-                                    )
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Live Generation Progress Indicator
+        // Live Generation Progress View
         if (isGenerating) {
             item {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
-                    color = CinemaSurfaceElevated,
-                    border = BorderStroke(1.dp, CinemaCyan)
+                    color = ThemeManager.surfaceElevatedColor,
+                    border = BorderStroke(1.dp, ThemeManager.primaryAccent)
                 ) {
                     Column(
                         modifier = Modifier.padding(16.dp),
@@ -713,19 +759,19 @@ fun StudioGeneratorScreen(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(20.dp),
-                                color = CinemaCyan,
+                                color = ThemeManager.primaryAccent,
                                 strokeWidth = 2.5.dp
                             )
                             Spacer(modifier = Modifier.width(10.dp))
                             Text(
-                                text = "Generating Video...",
-                                color = CinemaCyan,
+                                text = if (creationMode == 0) "Synthesizing AI Video..." else "Animate Image to Video...",
+                                color = ThemeManager.primaryAccent,
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
 
                         LinearProgressIndicator(
                             progress = { generationProgress },
@@ -733,15 +779,15 @@ fun StudioGeneratorScreen(
                                 .fillMaxWidth()
                                 .height(6.dp)
                                 .clip(RoundedCornerShape(3.dp)),
-                            color = CinemaCyan,
-                            trackColor = CinemaSurfaceBorder
+                            color = ThemeManager.primaryAccent,
+                            trackColor = ThemeManager.surfaceBorderColor
                         )
 
                         Spacer(modifier = Modifier.height(8.dp))
 
                         Text(
                             text = generationStep,
-                            color = TextSecondary,
+                            color = ThemeManager.textSecondaryColor,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium
                         )
@@ -750,12 +796,18 @@ fun StudioGeneratorScreen(
             }
         }
 
-        // Primary Action Button: GENERATE VIDEO
+        // Primary Action: GENERATE VIDEO BUTTON
         item {
+            val isEnabled = !isGenerating && (
+                    (creationMode == 0 && textPrompt.isNotBlank()) ||
+                            (creationMode == 1 && selectedImageUri != null && imageMotionPrompt.isNotBlank())
+                    )
+
             Button(
                 onClick = {
+                    val promptToUse = if (creationMode == 0) textPrompt else imageMotionPrompt
                     onGenerateVideo(
-                        prompt,
+                        promptToUse,
                         selectedStyle,
                         selectedAspectRatio,
                         selectedCameraMotion,
@@ -763,47 +815,35 @@ fun StudioGeneratorScreen(
                         selectedDuration,
                         selectedFps,
                         motionIntensity,
-                        selectedAudioMood
+                        selectedAudioMood,
+                        if (creationMode == 0) "text" else "image",
+                        selectedImageUri?.toString()
                     )
                 },
-                enabled = !isGenerating && prompt.isNotBlank(),
+                enabled = isEnabled,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(54.dp)
                     .testTag("generate_video_button"),
                 shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color.Transparent,
-                    disabledContainerColor = CinemaSurfaceElevated
-                ),
-                contentPadding = PaddingValues()
+                    containerColor = ThemeManager.primaryAccent,
+                    contentColor = Color.Black
+                )
             ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.horizontalGradient(
-                                listOf(AccentGradientStart, AccentGradientEnd)
-                            )
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.Movie,
-                            contentDescription = null,
-                            tint = CinemaBackground,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = if (isGenerating) "RENDERING VIDEO..." else "GENERATE VIDEO",
-                            color = CinemaBackground,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 1.sp
-                        )
-                    }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = if (creationMode == 0) Icons.Default.Movie else Icons.Default.CameraAlt,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (isGenerating) "RENDERING VIDEO..." else if (creationMode == 0) "GENERATE VIDEO (${selectedDuration}s)" else "ANIMATE PHOTO TO VIDEO (${selectedDuration}s)",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp
+                    )
                 }
             }
             Spacer(modifier = Modifier.height(24.dp))
