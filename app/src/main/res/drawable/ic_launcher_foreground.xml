@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Cinema Camera / Clapper Body (Centered in 26..82) -->
+    <!-- Film slate / camera rounded card base -->
+    <path
+        android:pathData="M32,38 C32,33.58 35.58,30 40,30 L68,30 C72.42,30 76,33.58 76,38 L76,68 C76,72.42 72.42,76 68,76 L40,76 C35.58,76 32,72.42 32,68 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="32"
+                android:startY="30"
+                android:endX="76"
+                android:endY="76"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#7F39FB" />
+                <item android:offset="0.5" android:color="#4F46E5" />
+                <item android:offset="1.0" android:color="#06B6D4" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Camera Lens / Projector Cone on the right -->
+    <path
+        android:pathData="M76,46 L86,39 C87.2,38.1 89,39.0 89,40.5 L89,65.5 C89,67.0 87.2,67.9 86,67.0 L76,60 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="76"
+                android:startY="40"
+                android:endX="89"
+                android:endY="67"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#4F46E5" />
+                <item android:offset="1.0" android:color="#06B6D4" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Top Film Reel Circles -->
+    <path
+        android:pathData="M43,30m-6,0a6,6 0,1 1,12 0a6,6 0,1 1,-12 0"
+        android:fillColor="#A78BFA" />
+    <path
+        android:pathData="M63,30m-6,0a6,6 0,1 1,12 0a6,6 0,1 1,-12 0"
+        android:fillColor="#38BDF8" />
+
+    <!-- Center Play Icon -->
+    <path
+        android:pathData="M48,44 L64,53 L48,62 Z"
+        android:fillColor="#FFFFFF" />
+
+    <!-- AI Sparkle / Prompt Star Top-Left -->
+    <path
+        android:pathData="M27,27 C27,24 25,22 22,22 C25,22 27,20 27,17 C27,20 29,22 32,22 C29,22 27,24 27,27 Z"
+        android:fillColor="#FBBF24" />
+
+    <!-- Sparkle Bottom-Right -->
+    <path
+        android:pathData="M81,80 C81,77.5 79.5,76 77,76 C79.5,76 81,74.5 81,72 C81,74.5 82.5,76 85,76 C82.5,76 81,77.5 81,80 Z"
+        android:fillColor="#38BDF8" />
+
+</vector>
