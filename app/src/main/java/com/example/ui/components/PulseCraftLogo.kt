@@ -251,3 +251,11 @@ fun PulseCraftHeader(
         actions()
     }
 }
+
+@Composable
+fun PulseCraftLogo(
+    modifier: Modifier = Modifier,
+    size: Dp = 40.dp
+) {
+    PulseCraftVectorBadge(modifier = modifier, size = size)
+}

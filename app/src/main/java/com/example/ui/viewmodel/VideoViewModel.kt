@@ -7,8 +7,10 @@ import com.example.audio.AmbientAudioEngine
 import com.example.audio.BeatFlowEngine
 import com.example.audio.MicrophoneRecorder
 import com.example.audio.VoiceProfile
+import com.example.audio.VoiceTone
 import com.example.audio.VoiceoverEngine
 import com.example.data.api.GeminiVideoService
+import com.example.data.preferences.ApiKeyManager
 import com.example.data.local.AppDatabase
 import com.example.data.model.BeatTransient
 import com.example.data.model.CaptionSegment
@@ -83,6 +85,20 @@ class VideoViewModel(application: Application) : AndroidViewModel(application) {
     private val _stockItems = MutableStateFlow<List<StockMediaItem>>(stockRepository.searchMedia("", null))
     val stockItems: StateFlow<List<StockMediaItem>> = _stockItems.asStateFlow()
 
+    // Dynamic Gemini API Key persistence state
+    private val _geminiApiKey = MutableStateFlow(ApiKeyManager.getApiKey(application))
+    val geminiApiKey: StateFlow<String> = _geminiApiKey.asStateFlow()
+
+    // Realistic Human-like & Deep Horror Voice Controls
+    private val _selectedVoiceTone = MutableStateFlow(VoiceTone.DEEP_HORROR)
+    val selectedVoiceTone: StateFlow<VoiceTone> = _selectedVoiceTone.asStateFlow()
+
+    private val _voicePitch = MutableStateFlow(0.60f) // extra deep heavy default
+    val voicePitch: StateFlow<Float> = _voicePitch.asStateFlow()
+
+    private val _voiceSpeed = MutableStateFlow(0.85f) // suspenseful pacing default
+    val voiceSpeed: StateFlow<Float> = _voiceSpeed.asStateFlow()
+
     init {
         viewModelScope.launch {
             repository.allProjects.collect { list ->
@@ -92,7 +108,6 @@ class VideoViewModel(application: Application) : AndroidViewModel(application) {
                     val initial = list.firstOrNull()
                     _selectedProject.value = initial
                     initial?.let {
-                        startAudio(it.audioMood)
                         recomputeBeatGrid(it.durationSeconds, it.bpm)
                     }
                 }
@@ -426,6 +441,46 @@ class VideoViewModel(application: Application) : AndroidViewModel(application) {
         _userMessage.value = "Downloaded '${item.title}' to device storage!"
     }
 
+    // API Key Settings
+    fun saveGeminiApiKey(key: String) {
+        val trimmed = key.trim()
+        ApiKeyManager.saveApiKey(getApplication(), trimmed)
+        _geminiApiKey.value = trimmed
+        _userMessage.value = if (trimmed.isNotBlank()) "Gemini API Key saved securely!" else "API Key cleared."
+    }
+
+    fun clearGeminiApiKey() {
+        ApiKeyManager.clearApiKey(getApplication())
+        _geminiApiKey.value = ""
+        _userMessage.value = "Gemini API Key cleared."
+    }
+
+    // Voice Tone Controls
+    fun setVoiceTone(tone: VoiceTone) {
+        _selectedVoiceTone.value = tone
+        _voicePitch.value = tone.defaultPitch
+        _voiceSpeed.value = tone.defaultSpeed
+    }
+
+    fun setVoicePitch(pitch: Float) {
+        _voicePitch.value = pitch.coerceIn(0.40f, 1.80f)
+    }
+
+    fun setVoiceSpeed(speed: Float) {
+        _voiceSpeed.value = speed.coerceIn(0.50f, 1.50f)
+    }
+
+    fun previewVoiceTone(text: String) {
+        val tone = _selectedVoiceTone.value
+        val textToSpeak = text.ifBlank { tone.sampleScript }
+        voiceoverEngine.speakTone(
+            text = textToSpeak,
+            tone = tone,
+            customPitch = _voicePitch.value,
+            customSpeed = _voiceSpeed.value
+        )
+    }
+
     fun enhancePrompt(
         prompt: String,
         style: String,
@@ -437,7 +492,13 @@ class VideoViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _isEnhancingPrompt.value = true
             try {
-                val enhanced = repository.enhancePrompt(prompt, style, cameraMotion, lighting)
+                val enhanced = repository.enhancePrompt(
+                    prompt = prompt,
+                    style = style,
+                    cameraMotion = cameraMotion,
+                    lighting = lighting,
+                    apiKey = _geminiApiKey.value
+                )
                 onEnhanced(enhanced)
                 _userMessage.value = "Prompt enhanced with Hollywood cinematic cues!"
             } catch (e: Exception) {
@@ -476,7 +537,14 @@ class VideoViewModel(application: Application) : AndroidViewModel(application) {
             _generationProgress.value = 0.28f
             _generationStep.value = "Choreographing camera motion & lighting angles ($cameraMotion)..."
 
-            val enhanced = repository.enhancePrompt(prompt, style, cameraMotion, lighting)
+            val currentKey = _geminiApiKey.value
+            val enhanced = repository.enhancePrompt(
+                prompt = prompt,
+                style = style,
+                cameraMotion = cameraMotion,
+                lighting = lighting,
+                apiKey = currentKey
+            )
             _generationProgress.value = 0.52f
             _generationStep.value = "Generating ${durationSeconds}s multi-shot storyboard sequence..."
 
@@ -485,7 +553,8 @@ class VideoViewModel(application: Application) : AndroidViewModel(application) {
                 style = style,
                 cameraMotion = cameraMotion,
                 lighting = lighting,
-                duration = durationSeconds
+                duration = durationSeconds,
+                apiKey = currentKey
             )
 
             _generationProgress.value = 0.76f
@@ -552,6 +621,18 @@ class VideoViewModel(application: Application) : AndroidViewModel(application) {
                 _selectedProject.value = projects.value.firstOrNull { it.id != project.id }
             }
             _userMessage.value = "Project removed"
+        }
+    }
+
+    fun duplicateProject(project: VideoProject) {
+        viewModelScope.launch {
+            val duplicated = project.copy(
+                id = 0,
+                title = "${project.title} (Copy)",
+                createdAt = System.currentTimeMillis()
+            )
+            repository.saveProject(duplicated)
+            _userMessage.value = "Project duplicated"
         }
     }
 

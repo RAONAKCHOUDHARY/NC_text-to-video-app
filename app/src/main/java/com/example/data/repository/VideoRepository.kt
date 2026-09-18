@@ -37,9 +37,10 @@ class VideoRepository(
         prompt: String,
         style: String,
         cameraMotion: String,
-        lighting: String
+        lighting: String,
+        apiKey: String? = null
     ): String {
-        return apiService.enhancePrompt(prompt, style, cameraMotion, lighting).getOrDefault(prompt)
+        return apiService.enhancePrompt(prompt, style, cameraMotion, lighting, apiKey).getOrDefault(prompt)
     }
 
     suspend fun generateStoryboard(
@@ -47,9 +48,10 @@ class VideoRepository(
         style: String,
         cameraMotion: String,
         lighting: String,
-        duration: Int
+        duration: Int,
+        apiKey: String? = null
     ): List<SceneShot> {
-        val result = apiService.generateStoryboard(prompt, style, cameraMotion, lighting, duration)
+        val result = apiService.generateStoryboard(prompt, style, cameraMotion, lighting, duration, apiKey)
         return result.getOrElse {
             apiService.generateLocalScenes(prompt, style, cameraMotion, lighting, duration)
         }

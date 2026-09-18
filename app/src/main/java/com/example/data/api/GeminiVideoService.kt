@@ -29,10 +29,12 @@ class GeminiVideoService {
         prompt: String,
         style: String,
         cameraMotion: String,
-        lighting: String
+        lighting: String,
+        customApiKey: String? = null
     ): Result<String> = withContext(Dispatchers.IO) {
-        val apiKey = BuildConfig.GEMINI_API_KEY
-        if (apiKey.isBlank() || apiKey == "MY_GEMINI_API_KEY") {
+        val apiKey = customApiKey?.trim()?.ifBlank { null }
+            ?: BuildConfig.GEMINI_API_KEY.trim().takeIf { it.isNotBlank() && it != "MY_GEMINI_API_KEY" }
+        if (apiKey.isNullOrBlank()) {
             // Intelligent fallback generator
             return@withContext Result.success(
                 generateLocalEnhancedPrompt(prompt, style, cameraMotion, lighting)
@@ -40,7 +42,7 @@ class GeminiVideoService {
         }
 
         try {
-            val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=$apiKey"
+            val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$apiKey"
             val systemPrompt = "You are an elite Hollywood cinematographer and AI video prompt engineer. " +
                     "Expand the user's prompt into a vivid, single-paragraph cinematic text-to-video prompt. " +
                     "Incorporate style: '$style', camera motion: '$cameraMotion', and lighting: '$lighting'. " +
@@ -105,15 +107,17 @@ class GeminiVideoService {
         style: String,
         cameraMotion: String,
         lighting: String,
-        totalDuration: Int
+        totalDuration: Int,
+        customApiKey: String? = null
     ): Result<List<SceneShot>> = withContext(Dispatchers.IO) {
-        val apiKey = BuildConfig.GEMINI_API_KEY
-        if (apiKey.isBlank() || apiKey == "MY_GEMINI_API_KEY") {
+        val apiKey = customApiKey?.trim()?.ifBlank { null }
+            ?: BuildConfig.GEMINI_API_KEY.trim().takeIf { it.isNotBlank() && it != "MY_GEMINI_API_KEY" }
+        if (apiKey.isNullOrBlank()) {
             return@withContext Result.success(generateLocalScenes(prompt, style, cameraMotion, lighting, totalDuration))
         }
 
         try {
-            val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=$apiKey"
+            val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$apiKey"
             val promptText = """
                 You are a director choreographing a text-to-video sequence.
                 Break down this video prompt into 3 sequential shots/scenes for a total duration of $totalDuration seconds:
@@ -247,6 +251,9 @@ class GeminiVideoService {
         lighting: String
     ): String {
         val styleModifier = when (style) {
+            "Horror" -> "spine-chilling horror aesthetic, ominous atmospheric fog, terrifying deep crimson shadow silhouettes, eerie low-key lighting, haunting tension, psychological dread, uncanny details"
+            "Realistic" -> "hyper-realistic 8K photorealism, shot on ARRI Alexa 65, pristine optical clarity, authentic physical surface micro-textures, natural dynamic range, lifelike human features"
+            "Cinematic" -> "Hollywood blockbuster cinematography, 35mm anamorphic prime lens, subtle golden rim lighting, cinematic depth of field, balanced color grading"
             "3D Anime Studio" -> "cel-shaded 3D anime cinematic render, sharp contour outlines, dramatic high-key rim lighting, dynamic anime keyframing, stylized particle effects"
             "Indian Cartoon 3D Style" -> "vibrant Indian 3D animation style with expressive stylized proportions, colorful festival palettes, animated town street atmosphere, playful energetic dynamics"
             "Cyberpunk" -> "hyper-detailed futuristic cityscape drenched in rain, neon holographic signs, chromatic aberration, reflections on wet asphalt"
@@ -270,6 +277,9 @@ class GeminiVideoService {
     ): List<SceneShot> {
         val shotDuration = (totalDuration / 3.0f)
         val styleColors = when (style) {
+            "Horror" -> listOf("#DC2626", "#450A0A", "#030712")
+            "Realistic" -> listOf("#38BDF8", "#F1F5F9", "#0F172A")
+            "Cinematic" -> listOf("#F59E0B", "#8B5CF6", "#0F172A")
             "Cyberpunk" -> listOf("#00F2FE", "#7F39FB", "#0F172A")
             "Anime" -> listOf("#38BDF8", "#F472B6", "#1E1B4B")
             "Studio Ghibli" -> listOf("#4ADE80", "#FBBF24", "#064E3B")

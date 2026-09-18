@@ -11,15 +11,19 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.VideoLibrary
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.Movie
 import androidx.compose.material.icons.outlined.PlayCircle
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.VideoLibrary
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -46,6 +50,7 @@ import com.example.data.model.VideoProject
 import com.example.ui.components.ThemeSettingsDialog
 import com.example.ui.screens.AudioVoiceStudioScreen
 import com.example.ui.screens.CreativeEditorScreen
+import com.example.ui.screens.SettingsScreen
 import com.example.ui.screens.StockLibraryScreen
 import com.example.ui.screens.StudioGeneratorScreen
 import com.example.ui.screens.VideoDetailScreen
@@ -71,7 +76,8 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun TextToVideoApp(viewModel: VideoViewModel) {
     var selectedTab by remember { mutableIntStateOf(0) }
-    var studioSubTab by remember { mutableIntStateOf(0) } // 0: Creative Suite / Editor, 1: AI Generator
+    // Open directly into the main Video Generator dashboard (1: StudioGeneratorScreen, 0: Timeline Editor)
+    var studioSubTab by remember { mutableIntStateOf(1) }
     var activeDetailProject by remember { mutableStateOf<VideoProject?>(null) }
     var showThemeSettings by remember { mutableStateOf(false) }
 
@@ -93,6 +99,11 @@ fun TextToVideoApp(viewModel: VideoViewModel) {
     val stockItems by viewModel.stockItems.collectAsStateWithLifecycle()
     val stockSearchQuery by viewModel.stockSearchQuery.collectAsStateWithLifecycle()
     val stockCategory by viewModel.stockCategory.collectAsStateWithLifecycle()
+
+    val currentApiKey by viewModel.geminiApiKey.collectAsStateWithLifecycle()
+    val selectedVoiceTone by viewModel.selectedVoiceTone.collectAsStateWithLifecycle()
+    val voicePitch by viewModel.voicePitch.collectAsStateWithLifecycle()
+    val voiceSpeed by viewModel.voiceSpeed.collectAsStateWithLifecycle()
 
     // Handle user messages in snackbar
     LaunchedEffect(userMessage) {
@@ -116,7 +127,7 @@ fun TextToVideoApp(viewModel: VideoViewModel) {
                     .navigationBarsPadding()
                     .testTag("bottom_nav_bar")
             ) {
-                // Tab 0: Video Studio
+                // Tab 0: Studio
                 NavigationBarItem(
                     selected = selectedTab == 0 && activeDetailProject == null,
                     onClick = {
@@ -126,12 +137,12 @@ fun TextToVideoApp(viewModel: VideoViewModel) {
                     icon = {
                         Icon(
                             imageVector = if (selectedTab == 0 && activeDetailProject == null) Icons.Filled.Movie else Icons.Outlined.Movie,
-                            contentDescription = "Video Studio"
+                            contentDescription = "Studio"
                         )
                     },
                     label = {
                         Text(
-                            text = "Video Studio",
+                            text = "Studio",
                             fontSize = 10.sp,
                             fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal
                         )
@@ -143,10 +154,10 @@ fun TextToVideoApp(viewModel: VideoViewModel) {
                         unselectedIconColor = ThemeManager.textMutedColor,
                         unselectedTextColor = ThemeManager.textMutedColor
                     ),
-                    modifier = Modifier.testTag("nav_video_studio")
+                    modifier = Modifier.testTag("nav_studio")
                 )
 
-                // Tab 1: Audio & Voice Studio
+                // Tab 1: Voice
                 NavigationBarItem(
                     selected = selectedTab == 1 && activeDetailProject == null,
                     onClick = {
@@ -156,12 +167,12 @@ fun TextToVideoApp(viewModel: VideoViewModel) {
                     icon = {
                         Icon(
                             imageVector = if (selectedTab == 1 && activeDetailProject == null) Icons.Filled.Mic else Icons.Outlined.Mic,
-                            contentDescription = "Audio & Voice"
+                            contentDescription = "Voice"
                         )
                     },
                     label = {
                         Text(
-                            text = "Audio & Voice",
+                            text = "Voice",
                             fontSize = 10.sp,
                             fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal
                         )
@@ -173,10 +184,10 @@ fun TextToVideoApp(viewModel: VideoViewModel) {
                         unselectedIconColor = ThemeManager.textMutedColor,
                         unselectedTextColor = ThemeManager.textMutedColor
                     ),
-                    modifier = Modifier.testTag("nav_audio_studio")
+                    modifier = Modifier.testTag("nav_voice")
                 )
 
-                // Tab 2: Stock Library
+                // Tab 2: Settings
                 NavigationBarItem(
                     selected = selectedTab == 2 && activeDetailProject == null,
                     onClick = {
@@ -185,13 +196,13 @@ fun TextToVideoApp(viewModel: VideoViewModel) {
                     },
                     icon = {
                         Icon(
-                            imageVector = if (selectedTab == 2 && activeDetailProject == null) Icons.Filled.Search else Icons.Outlined.Search,
-                            contentDescription = "Stock Library"
+                            imageVector = if (selectedTab == 2 && activeDetailProject == null) Icons.Filled.Settings else Icons.Outlined.Settings,
+                            contentDescription = "Settings"
                         )
                     },
                     label = {
                         Text(
-                            text = "Stock Media",
+                            text = "Settings",
                             fontSize = 10.sp,
                             fontWeight = if (selectedTab == 2) FontWeight.Bold else FontWeight.Normal
                         )
@@ -203,10 +214,10 @@ fun TextToVideoApp(viewModel: VideoViewModel) {
                         unselectedIconColor = ThemeManager.textMutedColor,
                         unselectedTextColor = ThemeManager.textMutedColor
                     ),
-                    modifier = Modifier.testTag("nav_stock_library")
+                    modifier = Modifier.testTag("nav_settings")
                 )
 
-                // Tab 3: Studio Gallery / Vault
+                // Tab 3: History
                 NavigationBarItem(
                     selected = selectedTab == 3 || activeDetailProject != null,
                     onClick = {
@@ -215,13 +226,13 @@ fun TextToVideoApp(viewModel: VideoViewModel) {
                     },
                     icon = {
                         Icon(
-                            imageVector = if (selectedTab == 3) Icons.Filled.VideoLibrary else Icons.Outlined.VideoLibrary,
-                            contentDescription = "Gallery"
+                            imageVector = if (selectedTab == 3) Icons.Filled.History else Icons.Outlined.History,
+                            contentDescription = "History"
                         )
                     },
                     label = {
                         Text(
-                            text = "Gallery",
+                            text = "History",
                             fontSize = 10.sp,
                             fontWeight = if (selectedTab == 3) FontWeight.Bold else FontWeight.Normal
                         )
@@ -233,7 +244,7 @@ fun TextToVideoApp(viewModel: VideoViewModel) {
                         unselectedIconColor = ThemeManager.textMutedColor,
                         unselectedTextColor = ThemeManager.textMutedColor
                     ),
-                    modifier = Modifier.testTag("nav_gallery")
+                    modifier = Modifier.testTag("nav_history")
                 )
             }
         }
@@ -272,17 +283,33 @@ fun TextToVideoApp(viewModel: VideoViewModel) {
             } else {
                 when (selectedTab) {
                     0 -> {
-                        if (studioSubTab == 0) {
-                            CreativeEditorScreen(
-                                viewModel = viewModel,
-                                onOpenGenerator = { studioSubTab = 1 }
-                            )
-                        } else {
+                        if (studioSubTab == 1) {
                             StudioGeneratorScreen(
+                                activeProject = selectedProject,
+                                projects = projects,
+                                onSelectProject = { proj ->
+                                    viewModel.selectProject(proj)
+                                },
+                                onDeleteProject = { proj ->
+                                    viewModel.deleteProject(proj)
+                                },
+                                onDuplicateProject = { proj ->
+                                    viewModel.duplicateProject(proj)
+                                },
                                 isGenerating = isGenerating,
                                 generationStep = generationStep,
                                 generationProgress = generationProgress,
                                 isEnhancingPrompt = isEnhancingPrompt,
+                                currentApiKey = currentApiKey,
+                                onSaveApiKey = { viewModel.saveGeminiApiKey(it) },
+                                onClearApiKey = { viewModel.clearGeminiApiKey() },
+                                selectedVoiceTone = selectedVoiceTone,
+                                onSelectVoiceTone = { viewModel.setVoiceTone(it) },
+                                voicePitch = voicePitch,
+                                onVoicePitchChange = { viewModel.setVoicePitch(it) },
+                                voiceSpeed = voiceSpeed,
+                                onVoiceSpeedChange = { viewModel.setVoiceSpeed(it) },
+                                onPreviewVoice = { viewModel.previewVoiceTone(it) },
                                 onEnhancePrompt = { prompt, style, camera, lighting, onDone ->
                                     viewModel.enhancePrompt(prompt, style, camera, lighting, onDone)
                                 },
@@ -307,6 +334,11 @@ fun TextToVideoApp(viewModel: VideoViewModel) {
                                 onOpenThemeSettings = { showThemeSettings = true },
                                 onSwitchToEditor = { studioSubTab = 0 }
                             )
+                        } else {
+                            CreativeEditorScreen(
+                                viewModel = viewModel,
+                                onOpenGenerator = { studioSubTab = 1 }
+                            )
                         }
                     }
 
@@ -316,6 +348,12 @@ fun TextToVideoApp(viewModel: VideoViewModel) {
                             speechProgress = speechProgress,
                             onSpeak = { text, profile, pitch, speed ->
                                 viewModel.speakVoiceover(text, profile, pitch, speed)
+                            },
+                            onSpeakTone = { text, tone, pitch, speed ->
+                                viewModel.setVoiceTone(tone)
+                                viewModel.setVoicePitch(pitch)
+                                viewModel.setVoiceSpeed(speed)
+                                viewModel.previewVoiceTone(text)
                             },
                             onStop = { viewModel.stopVoiceover() },
                             onAttachToVideo = { script, profile ->
@@ -329,17 +367,10 @@ fun TextToVideoApp(viewModel: VideoViewModel) {
                     }
 
                     2 -> {
-                        StockLibraryScreen(
-                            stockItems = stockItems,
-                            searchQuery = stockSearchQuery,
-                            onSearchQueryChange = { viewModel.setStockSearchQuery(it) },
-                            selectedCategory = stockCategory,
-                            onSelectCategory = { viewModel.setStockCategory(it) },
-                            onDownloadItem = { viewModel.downloadStockItem(it) },
-                            onImportToStudio = { stockItem ->
-                                selectedTab = 0
-                                studioSubTab = 0
-                            }
+                        SettingsScreen(
+                            currentApiKey = currentApiKey,
+                            onSaveApiKey = { viewModel.saveGeminiApiKey(it) },
+                            onClearApiKey = { viewModel.clearGeminiApiKey() }
                         )
                     }
 

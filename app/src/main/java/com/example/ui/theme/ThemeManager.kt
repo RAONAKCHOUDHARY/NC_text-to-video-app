@@ -141,6 +141,20 @@ object ThemeManager {
     val isDark: Boolean
         get() = activeStudioTheme.isDark
 
+    val currentTheme: StudioTheme
+        get() = activeStudioTheme
+
+    val isDarkTheme: Boolean
+        get() = isDark
+
+    fun toggleThemeMode() {
+        if (isDark) {
+            selectStudioTheme(StudioTheme.CRISP_STUDIO_LIGHT)
+        } else {
+            selectStudioTheme(StudioTheme.OLED_MIDNIGHT)
+        }
+    }
+
     val backgroundColor: Color
         get() = activeStudioTheme.background
 

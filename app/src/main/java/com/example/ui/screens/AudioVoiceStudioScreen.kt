@@ -70,6 +70,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.audio.VoiceProfile
+import com.example.audio.VoiceTone
 import com.example.ui.theme.CinemaAmber
 import com.example.ui.theme.CinemaCyan
 import com.example.ui.theme.CinemaPink
@@ -87,16 +88,18 @@ fun AudioVoiceStudioScreen(
     onAttachToVideo: (script: String, profile: VoiceProfile) -> Unit,
     onGenerateAIScript: (topic: String, onDone: (String) -> Unit) -> Unit,
     isGeneratingScript: Boolean,
+    onSpeakTone: ((text: String, tone: VoiceTone, pitch: Float, speed: Float) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    var selectedTone by remember { mutableStateOf<VoiceTone?>(VoiceTone.DEEP_HORROR) }
     var selectedProfile by remember { mutableStateOf(VoiceProfile.ADAM_DEEP_MALE) }
     var scriptText by remember {
-        mutableStateOf("In a world sculpted by shadows, the dawn of cinematic imagination awakens with breathtaking power.")
+        mutableStateOf("In the deep silence of the midnight fog, a chilling shadow steps forward. Listen closely... you are not alone.")
     }
 
-    var pitchSlider by remember { mutableFloatStateOf(selectedProfile.defaultPitch) }
-    var speedSlider by remember { mutableFloatStateOf(selectedProfile.defaultSpeed) }
+    var pitchSlider by remember { mutableFloatStateOf(VoiceTone.DEEP_HORROR.defaultPitch) }
+    var speedSlider by remember { mutableFloatStateOf(VoiceTone.DEEP_HORROR.defaultSpeed) }
     var voiceVolumeBalance by remember { mutableFloatStateOf(0.8f) } // Voice vs BG music
     var selectedBgMusic by remember { mutableStateOf("ambient_synth") }
 
@@ -109,12 +112,12 @@ fun AudioVoiceStudioScreen(
     )
 
     val scriptPresets = listOf(
-        Pair("Cinematic Trailer", "In the silence between the stars, a new legend begins. Witness the journey of discovery."),
+        Pair("Deep Horror / Bhari Aawaz", "The shadows breathe in the darkness... Do you feel that icy chill creeping behind your neck? It has found you."),
+        Pair("Cinematic Darawni Thriller", "A heartbeat echoing through the silence of midnight. The lock slowly clicks... open."),
+        Pair("Realistic Storyteller", "Every forgotten street in this ancient city carries a secret whispered from generation to generation."),
+        Pair("Dramatic Shocking", "Stop right there! What you are about to witness will forever alter everything you believed."),
         Pair("Hindi Poetry & Nature", "सूरज की पहली किरण जब बादलों को चीरती हुई धरती पर पड़ती है, तो जीवन की एक नई दास्तान शुरू होती है।"),
-        Pair("Rajasthani Heritage", "खम्मा घणी सा! मरुधरा री माटी और किलों री अमर शान, PulseCraft सूं बणायो बेमिसाल नजरो।"),
-        Pair("Punjabi Energy", "ਸਤਿ ਸ੍ਰੀ ਅਕਾਲ ਜੀ! ਪੰਜਾਬ ਦੇ ਰੰਗ ਅਤੇ ਧੜਕਣ ਨਾਲ ਭਰਪੂਰ ਇਹ ਸਿਨੇਮੈਟਿਕ ਕਹਾਣੀ ਦੇਖੋ।"),
-        Pair("Haryanvi Bold", "राम राम भाई सारे ने! हरियाणा का दम और देसी ठाठ, पूरा सिनेमैटिक स्वैग!"),
-        Pair("ASMR Gentle Rain", "Close your eyes. Soft raindrops fall upon the calm water, creating endless gentle ripples.")
+        Pair("Rajasthani Heritage", "खम्मा घणी सा! मरुधरा री माटी और किलों री अमर शान, PulseCraft सूं बणायो बेमिसाल नजरो।")
     )
 
     LazyColumn(
@@ -253,7 +256,11 @@ fun AudioVoiceStudioScreen(
                                 if (isSpeaking) {
                                     onStop()
                                 } else {
-                                    onSpeak(scriptText, selectedProfile, pitchSlider, speedSlider)
+                                    if (selectedTone != null && onSpeakTone != null) {
+                                        onSpeakTone(scriptText, selectedTone!!, pitchSlider, speedSlider)
+                                    } else {
+                                        onSpeak(scriptText, selectedProfile, pitchSlider, speedSlider)
+                                    }
                                 }
                             },
                             colors = ButtonDefaults.buttonColors(
@@ -298,11 +305,123 @@ fun AudioVoiceStudioScreen(
             }
         }
 
+        // Realistic Voice Tone Selector (Horror & Thriller Engine)
+        item {
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "REALISTIC VOICE TONE (HORROR & THRILLER)",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = ThemeManager.primaryAccent,
+                        letterSpacing = 1.sp
+                    )
+                    Text(
+                        text = "Deep Bhari Aawaz",
+                        fontSize = 11.sp,
+                        color = ThemeManager.textSecondaryColor
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    VoiceTone.values().forEach { tone ->
+                        val isSelected = selectedTone == tone
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable {
+                                    selectedTone = tone
+                                    pitchSlider = tone.defaultPitch
+                                    speedSlider = tone.defaultSpeed
+                                    scriptText = tone.sampleScript
+                                }
+                                .testTag("voice_tone_${tone.id}"),
+                            color = if (isSelected) ThemeManager.primaryAccent.copy(alpha = 0.15f) else ThemeManager.surfaceColor,
+                            border = BorderStroke(
+                                1.dp,
+                                if (isSelected) ThemeManager.primaryAccent else ThemeManager.surfaceBorderColor
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .background(
+                                                if (isSelected) ThemeManager.primaryAccent else ThemeManager.surfaceElevatedColor,
+                                                CircleShape
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Tune,
+                                            contentDescription = null,
+                                            tint = if (isSelected) Color.Black else ThemeManager.primaryAccent,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = tone.displayName,
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (isSelected) ThemeManager.primaryAccent else ThemeManager.textPrimaryColor
+                                            )
+                                        }
+                                        Text(
+                                            text = tone.description,
+                                            fontSize = 11.sp,
+                                            color = ThemeManager.textMutedColor
+                                        )
+                                    }
+                                }
+
+                                IconButton(
+                                    onClick = {
+                                        selectedTone = tone
+                                        pitchSlider = tone.defaultPitch
+                                        speedSlider = tone.defaultSpeed
+                                        if (onSpeakTone != null) {
+                                            onSpeakTone(tone.sampleScript, tone, tone.defaultPitch, tone.defaultSpeed)
+                                        }
+                                    },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.VolumeUp,
+                                        contentDescription = "Test Tone",
+                                        tint = if (isSelected) ThemeManager.primaryAccent else ThemeManager.textMutedColor,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Voice Profiles Selector
         item {
             Column {
                 Text(
-                    text = "SELECT VOICE PROFILE",
+                    text = "CLASSIC VOICE PROFILES",
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     color = ThemeManager.textSecondaryColor,
@@ -313,12 +432,13 @@ fun AudioVoiceStudioScreen(
 
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     VoiceProfile.values().forEach { profile ->
-                        val isSelected = selectedProfile == profile
+                        val isSelected = selectedTone == null && selectedProfile == profile
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(12.dp))
                                 .clickable {
+                                    selectedTone = null
                                     selectedProfile = profile
                                     pitchSlider = profile.defaultPitch
                                     speedSlider = profile.defaultSpeed
@@ -522,7 +642,10 @@ fun AudioVoiceStudioScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("Voice Pitch:", fontSize = 12.sp, color = ThemeManager.textSecondaryColor)
+                        Column {
+                            Text("Voice Pitch:", fontSize = 12.sp, color = ThemeManager.textSecondaryColor)
+                            Text("0.5x - 0.7x for extra deep & scary horror", fontSize = 10.sp, color = ThemeManager.primaryAccent)
+                        }
                         Text(
                             String.format(Locale.US, "%.2fx", pitchSlider),
                             fontSize = 12.sp,
@@ -534,7 +657,7 @@ fun AudioVoiceStudioScreen(
                     Slider(
                         value = pitchSlider,
                         onValueChange = { pitchSlider = it },
-                        valueRange = 0.5f..1.8f,
+                        valueRange = 0.40f..1.60f,
                         colors = SliderDefaults.colors(
                             thumbColor = ThemeManager.primaryAccent,
                             activeTrackColor = ThemeManager.primaryAccent,
@@ -549,7 +672,10 @@ fun AudioVoiceStudioScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("Speech Cadence / Speed:", fontSize = 12.sp, color = ThemeManager.textSecondaryColor)
+                        Column {
+                            Text("Speech Cadence / Pace:", fontSize = 12.sp, color = ThemeManager.textSecondaryColor)
+                            Text("0.7x - 1.2x for suspenseful pacing", fontSize = 10.sp, color = ThemeManager.secondaryAccent)
+                        }
                         Text(
                             String.format(Locale.US, "%.2fx", speedSlider),
                             fontSize = 12.sp,
@@ -561,7 +687,7 @@ fun AudioVoiceStudioScreen(
                     Slider(
                         value = speedSlider,
                         onValueChange = { speedSlider = it },
-                        valueRange = 0.6f..1.8f,
+                        valueRange = 0.60f..1.50f,
                         colors = SliderDefaults.colors(
                             thumbColor = ThemeManager.primaryAccent,
                             activeTrackColor = ThemeManager.primaryAccent,
